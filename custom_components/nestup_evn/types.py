@@ -130,7 +130,7 @@ EVN_SENSORS: tuple[EVNSensorEntityDescription, ...] = (
     # Current day
     EVNSensorEntityDescription(
         key=ID_ECON_DAILY_NEW,
-        name="Sản lượng",
+        name="Sản lượng hôm qua",
         icon="mdi:flash-outline",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
@@ -139,7 +139,7 @@ EVN_SENSORS: tuple[EVNSensorEntityDescription, ...] = (
     ),
     EVNSensorEntityDescription(
         key=ID_ECOST_DAILY_NEW,
-        name="Tiền điện",
+        name="Tiền điện hôm qua",
         icon="mdi:cash-multiple",
         native_unit_of_measurement="VNĐ",
         value_fn=lambda data: data[ID_ECOST_DAILY_NEW],
@@ -148,7 +148,7 @@ EVN_SENSORS: tuple[EVNSensorEntityDescription, ...] = (
     # Previous day
     EVNSensorEntityDescription(
         key=ID_ECON_DAILY_OLD,
-        name="Sản lượng",
+        name="Sản lượng hôm kia",
         icon="mdi:flash-outline",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
@@ -157,7 +157,7 @@ EVN_SENSORS: tuple[EVNSensorEntityDescription, ...] = (
     ),
     EVNSensorEntityDescription(
         key=ID_ECOST_DAILY_OLD,
-        name="Tiền điện",
+        name="Tiền điện hôm kia",
         icon="mdi:cash-multiple",
         native_unit_of_measurement="VNĐ",
         value_fn=lambda data: data[ID_ECOST_DAILY_OLD],
