@@ -8,8 +8,8 @@ DOMAIN = "nestup_evn"
 
 CONF_DEVICE_NAME = "EVN Monitor"
 CONF_DEVICE_MODEL = "Vietnam EVN Monitor"
-CONF_DEVICE_MANUFACTURER = "Huy V. Trinh"
-CONF_DEVICE_SW_VERSION = "2.4.2"
+CONF_DEVICE_MANUFACTURER = "ChauTruongThinh"
+CONF_DEVICE_SW_VERSION = "3.0.0"
 
 CONF_USERNAME = "username"
 CONF_PASSWORD = "password"

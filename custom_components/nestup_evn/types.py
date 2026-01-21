@@ -101,9 +101,9 @@ VIETNAM_EVN_AREA = [
     Area(
         name=EVN_NAME.NPC,
         location="Khu vực miền Bắc",
-        evn_login_url="https://billnpccc.enterhub.asia/login",
-        evn_data_url="https://billnpccc.enterhub.asia/dailyconsump",
-        evn_payment_url="https://billnpccc.enterhub.asia/mobileapi/home/",
+        evn_login_url="https://cskh.evn.com.vn/cskh/v1/auth/login",
+        evn_data_url="https://apicskhevn.npc.com.vn/api/evn/tracuu/chisongay",
+        evn_payment_url="https://apicskhevn.npc.com.vn/api/evn/tracuu/hoadon",
         pattern=["PA", "PH", "PM", "PN"],
     ),
     Area(

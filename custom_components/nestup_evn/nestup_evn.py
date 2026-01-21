@@ -94,7 +94,7 @@ class EVNAPI:
             return await self.login_evnspc(username, password, customer_id)
 
         elif evn_area.get("name") == EVN_NAME.NPC:
-            return await self.login_evnnpc(username, password)
+            return await self.login_evnnpc(username, password, customer_id)
 
         return CONF_ERR_UNKNOWN
 
@@ -122,7 +122,11 @@ class EVNAPI:
                 customer_id, from_date, to_date
             )
 
-        elif evn_area.get("name") == EVN_NAME.NPC:
+        elif evn_area.get("name") == EVN_NAME.NPC:            
+            login_status = await self.login_evnnpc(username, password, customer_id)
+            if login_status != CONF_SUCCESS:
+                return {"status": login_status}
+                
             fetch_data = await self.request_update_evnnpc(
                 customer_id, from_date, to_date
             )
@@ -223,45 +227,70 @@ class EVNAPI:
         _LOGGER.error(f"Unable to login into EVN Endpoint: {resp_json}")
         return CONF_ERR_INVALID_AUTH
 
-    async def login_evnnpc(self, username, password) -> str:
-        """Create EVN login session corresponding with EVNNPC Endpoint"""
-
-        payload = {"username": username, "password": password}
-
-        auth_header = base64.b64encode(
-            (
-                "A21FA5C-34BE-42D7-AE70-8BF03C1EE540:026A64EF-2A91-4973-AA20-6E8A2B66D560"
-            ).encode()
-        ).decode()
-
-        headers = {
-            "User-Agent": "NPCApp/1 CFNetwork/1240.0.4 Darwin/20.6.0",
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Accept": "application/json",
-            "Accept-Encoding": "gzip, deflate, br",
-            "Connection": "keep-alive",
-            "Authorization": f"Basic {auth_header}",
+    async def login_evnnpc(self, username, password, customer_id) -> str:
+        payload = {
+            "username": username,
+            "password": password,
+            "deviceInfo": {
+                "deviceId": f"ha-{customer_id}",
+                "deviceType": "Android/HomeAssistant",
+            },
         }
 
-        ssl_context = await self.hass.async_add_executor_job(create_ssl_context)
+        headers = {
+            "accept": "application/json, text/plain, */*",
+            "content-type": "application/json",
+            "user-agent": "okhttp/4.12.0",
+			"connection": "Keep-Alive",
+        }
 
         resp = await self._session.post(
-            url=self._evn_area.get("evn_login_url"),
-            data=payload,
+            self._evn_area["evn_login_url"],
+            json=payload,
             headers=headers,
-            ssl=ssl_context,
         )
 
         status, resp_json = await json_processing(resp)
         if status != CONF_SUCCESS:
             return status
 
-        if not (
-            "message" in resp_json and resp_json["message"] == "Login successfully."
-        ):
+        if "data" not in resp_json or "accessToken" not in resp_json["data"]:
             return CONF_ERR_INVALID_AUTH
+            
+        data = resp_json.get("data", {})
+        access_token = data.get("accessToken")
+        user_data = data.get("data", {})
 
-        self._evn_area["access_token"] = resp_json["access_token"]
+        ma_kh_login = user_data.get("maKhang")
+        self._evn_area["access_token"] = access_token
+
+        if ma_kh_login != customer_id:
+            switch_url = (
+                f"https://cskh.evn.com.vn/cskh/v1/user/switch/{customer_id}"
+            )
+
+            switch_headers = {
+                "accept": "application/json, text/plain, */*",
+                "accept-encoding": "gzip",
+                "connection": "Keep-Alive",
+                "user-agent": "okhttp/4.12.0",
+                "authorization": f"Bearer {access_token}",
+            }
+
+            resp = await self._session.get(switch_url, headers=switch_headers)
+            status, switch_json = await json_processing(resp)
+
+            if status != CONF_SUCCESS:
+                return CONF_ERR_INVALID_ID
+
+            switch_data = switch_json.get("data", {})
+            new_token = switch_data.get("accessToken")
+
+            if not new_token:
+                return CONF_ERR_INVALID_ID
+
+            self._evn_area["access_token"] = new_token
+
         return CONF_SUCCESS
 
     async def login_evncpc(self, username, password) -> str:
@@ -605,121 +634,132 @@ class EVNAPI:
 
         return fetched_data
 
-    async def request_update_evnnpc(
-        self, customer_id, from_date, to_date, last_index="001"
-    ):
+    async def request_update_evnnpc(self, customer_id, from_date, to_date):
         """Request new update from EVNNPC Server"""
 
-        payload = {
-            "ma": f"{customer_id}{last_index}",
-            "start_intime": from_date.replace("/", "-"),
-            "stop_intime": to_date.replace("/", "-"),
-        }
-
         headers = {
-            "User-Agent": "NPCApp/1 CFNetwork/1240.0.4 Darwin/20.6.0",
-            "Content-Type": "application/json",
-            "Connection": "keep-alive",
-            "Authorization": f"Bearer {self._evn_area.get('access_token')}",
+            "accept": "application/json, text/plain, */*",
+            "content-type": "application/json",
+            "user-agent": "okhttp/4.12.0",
+            "authorization": f"Bearer {self._evn_area.get('access_token')}",
         }
 
-        ssl_context = await self.hass.async_add_executor_job(ssl.create_default_context)
+        from_date_dt = parser.parse(from_date, dayfirst=True).date()
+        to_date_dt = parser.parse(to_date, dayfirst=True).date() - timedelta(days=1)
+        previous_date_dt = from_date_dt - timedelta(days=1)
+
+        payload = {
+            "MA_DVIQLY": customer_id[:6],
+            "MA_DDO": f"{customer_id}001",
+            "TU_NGAY": previous_date_dt.strftime("%d/%m/%Y"),
+            "DEN_NGAY": to_date_dt.strftime("%d/%m/%Y"),
+        }
 
         resp = await self._session.post(
-            url=self._evn_area.get("evn_data_url"),
-            data=json.dumps(payload),
+            self._evn_area.get("evn_data_url"),
+            json=payload,
             headers=headers,
-            ssl=ssl_context,
         )
 
         status, resp_json = await json_processing(resp)
-        if status != CONF_SUCCESS:
-            return resp_json
+        if status != CONF_SUCCESS or not resp_json.get("data"):
+            return {"status": CONF_ERR_NO_MONITOR}
 
-        valid_info = []
+        data = resp_json["data"]
 
-        for each_entity in resp_json:
-            if "GHI_CHU" in each_entity and "LOAI_CHI_SO" in each_entity:
-                if (
-                    each_entity.get("GHI_CHU")
-                    == "Sản lượng điện tiêu thụ của khách hàng"
-                    and each_entity.get("LOAI_CHI_SO") == "P"
-                ):
-                    valid_info.append(each_entity)
+        if len(data) < 2:
+            return {"status": CONF_ERR_NO_MONITOR}
 
-        if valid_info == []:
-            return {
-                "status": CONF_ERR_NO_MONITOR,
-                "data": str(resp_json[0]),
-            }
+        record_last = data[0]
+        record_first = data[-1]
 
-        from_date = parser.parse(
-            valid_info[(-1 if len(valid_info) > 1 else 0)]["THOI_GIAN_BAT_DAU"]
-        )
-        to_date = parser.parse(valid_info[0]["THOI_GIAN_BAT_DAU"])
-        previous_date = parser.parse(
-            valid_info[(1 if len(valid_info) > 1 else 0)]["THOI_GIAN_BAT_DAU"]
-        )
+        total_new = round(float(record_last["CHISO_MOI"]), 2)
+        total_old = round(float(record_first["CHISO_MOI"]), 2)
+
+        if len(data) >= 2:
+            daily_new = round(
+                float(data[0]["CHISO_MOI"]) - float(data[1]["CHISO_MOI"]), 2
+            )
+        else:
+            daily_new = 0.0
+
+        if len(data) >= 3:
+            daily_old = round(
+                float(data[1]["CHISO_MOI"]) - float(data[2]["CHISO_MOI"]), 2
+            )
+        else:
+            daily_old = 0.0
+
+        monthly_new = round(total_new - total_old, 2)
 
         fetched_data = {
             "status": CONF_SUCCESS,
-            ID_ECON_TOTAL_NEW: round(float(valid_info[0]["CHI_SO_KET_THUC"]), 2),
-            ID_ECON_TOTAL_OLD: round(
-                float(valid_info[(-1 if len(valid_info) > 1 else 0)]["CHI_SO_BAT_DAU"]),
-                2,
-            ),
-            ID_ECON_DAILY_NEW: round(float(valid_info[0]["SAN_LUONG"]), 2),
-            ID_ECON_DAILY_OLD: round(
-                float(valid_info[(1 if len(valid_info) > 1 else 0)]["SAN_LUONG"]), 2
-            ),
-            ID_ECON_MONTHLY_NEW: round(
-                float(valid_info[0]["CHI_SO_KET_THUC"])
-                - float(
-                    valid_info[(-1 if len(valid_info) > 1 else 0)]["CHI_SO_BAT_DAU"]
-                ),
-                2,
-            ),
-            "from_date": from_date.date(),
-            "to_date": to_date.date(),
-            "previous_date": previous_date.date(),
+            ID_ECON_TOTAL_OLD: total_old,
+            ID_ECON_TOTAL_NEW: total_new,
+            ID_ECON_DAILY_NEW: daily_new,
+            ID_ECON_DAILY_OLD: daily_old,
+            ID_ECON_MONTHLY_NEW: monthly_new,
+            "from_date": from_date_dt,
+            "to_date": to_date_dt,
+            "previous_date": previous_date_dt,
         }
 
-        resp = await self._session.get(
-            url=f'{self._evn_area.get("evn_payment_url")}{customer_id}',
+        resp = await self._session.post(
+            self._evn_area.get("evn_payment_url"),
             headers=headers,
-            ssl=ssl_context,
         )
-        status, resp_json = await json_processing(resp)
 
-        payment_status = CONF_ERR_UNKNOWN
-        m_payment_status = 0
+        status, bill_json = await json_processing(resp)
 
-        if status == CONF_SUCCESS and "data" in resp_json:
-            if "customerInfo" in resp_json["data"] and "invoice" in resp_json[
-                "data"
-            ].get("customerInfo"):
-                if len(resp_json["data"]["customerInfo"]["invoice"]):
-                    paid_status = resp_json["data"]["customerInfo"]["invoice"][0].get(
-                        "paid"
-                    )
+        if status == CONF_SUCCESS and bill_json.get("data"):
+            bill = bill_json["data"][0]
+            if bill.get("TTRANG_TTOAN") == "CHUATT":
+                fetched_data.update({
+                    ID_PAYMENT_NEEDED: STATUS_PAYMENT_NEEDED,
+                    ID_M_PAYMENT_NEEDED: int(bill.get("TONG_TIEN", 0)),
+                })
+            else:
+                fetched_data.update({
+                    ID_PAYMENT_NEEDED: STATUS_N_PAYMENT_NEEDED,
+                    ID_M_PAYMENT_NEEDED: 0,
+                })
+        else:
+            fetched_data.update({
+                ID_PAYMENT_NEEDED: CONF_ERR_UNKNOWN,
+                ID_M_PAYMENT_NEEDED: 0,
+            })
 
-                    if paid_status:
-                        payment_status = STATUS_N_PAYMENT_NEEDED
-                    else:
-                        payment_status = STATUS_PAYMENT_NEEDED
-                        m_payment_status = resp_json["data"]["customerInfo"]["invoice"][
-                            0
-                        ].get("paymentTotalAmount")
-
-        fetched_data.update(
-            {
-                ID_PAYMENT_NEEDED: payment_status,
-                ID_M_PAYMENT_NEEDED: m_payment_status,
+        try:
+            payload = {
+                "TU_NGAY": from_date_dt.strftime("%d/%m/%Y"),
+                "DEN_NGAY": to_date_dt.strftime("%d/%m/%Y"),
             }
-        )
 
+            resp = await self._session.post(
+                self._evn_area.get("evn_loadshedding_url"),
+                json=payload,
+                headers=headers,
+            )
+
+            status, shed_json = await json_processing(resp)
+
+            if status == CONF_SUCCESS and shed_json.get("data"):
+                shed = shed_json["data"][0]
+                fetched_data[ID_LOADSHEDDING] = (
+                    shed.get("THOI_GIAN")
+                    or shed.get("NOI_DUNG")
+                    or STATUS_LOADSHEDDING
+                )
+            else:
+                fetched_data[ID_LOADSHEDDING] = (
+                    STATUS_LOADSHEDDING if status == CONF_EMPTY else CONF_ERR_UNKNOWN
+                )
+
+        except Exception:
+            fetched_data[ID_LOADSHEDDING] = CONF_ERR_UNKNOWN
+            
         return fetched_data
-
+        
     async def request_update_evncpc(self, customer_id):
         """Request new update from EVNCPC Server"""
 
