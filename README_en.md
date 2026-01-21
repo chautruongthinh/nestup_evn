@@ -31,7 +31,7 @@ Starting from the v1.2.5 version, the component has successfully provided suppor
 |:---:|:---:|:---:|:---:|:---:|
 | EVNHCMC | Ho Chi Minh City | ☑️ | ☑️ | [Link](https://cskh.evnhcmc.vn/lienhe)
 | EVNSPC | Southern Vietnam | ☑️ | ☑️ | [Link](https://cskh.evnspc.vn/LienHe/CacKenhTrucTuyen)
-| EVNNPC | Northern Vietnam |  |  | [Link](https://cskh.npc.com.vn/Home/LienHeNPC)
+| EVNNPC | Northern Vietnam | ☑️ | ☑️ | [Link](https://cskh.npc.com.vn/Home/LienHeNPC)
 | EVNHANOI | Ha Noi Capital | ☑️ | ☑️ | [Link](https://evnhanoi.vn/infomation/lien-he)
 | EVNCPC | Central Vietnam | ☑️ | ☑️ | [Link](https://cskh.cpc.vn/lien-he)
     
@@ -108,9 +108,19 @@ Starting from the v1.2.5 version, the component has successfully provided suppor
 
     ` 60 minutes ` is the default interval for fetching new data from EVN, which is reasonable break, otherwise it would take up resources and overwhelm the server.
 
+### Notice for EVN NPC Users
+Because the old app cannot retrieve daily electricity consumption data, it is necessary to switch to the new app.
+Please download the new app and register an account in order to access electricity consumption data.
+
+Download link for the new application:
+
+ANDROID: https://play.google.com/store/apps/details?id=com.evn.cskh.vn&hl=vi
+
+iOS: https://apps.apple.com/vn/app/evn-cskh/id6754793134
 ## Thank and Support
 
 ### Special thanks to:
+- **Mr. Trvqhuy** the author of this source code.
 - **Mr. Pham Dinh Hai** and **Mr. Huynh Nhat** for believing and providing the author his EVN Credentials, thus the project could be available for those living in Hanoi Capital and Central Vietnam.
 - **Mr. Hoang Tung V** for giving a huge support to the author.
 

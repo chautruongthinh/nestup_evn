@@ -4,9 +4,9 @@
 
 ## Công cụ theo dõi điện năng tiêu thụ từ EVN Việt Nam dành cho HomeAssistant
 
-#### [English](https://github.com/trvqhuy/ha-evn/blob/main/README_en.md) | Tiếng Việt
+#### [English](https://github.com/chautruongthinh/ha-evn/blob/main/README_en.md) | Tiếng Việt
 
-Từ việc sử dụng các phương thức có sẵn của module **AIOHTTP** thông qua những giao thức **HTTP(S)** cơ bản, công cụ cho phép theo dõi dữ liệu điện năng tiêu thụ từ [EVN](https://www.evn.com.vn) trực tiếp trên UI [Home Assistant](https://www.home-assistant.io), hiện tại đã hỗ trợ cho **tất cả vùng miền** tại Việt Nam cùng với chi nhánh EVN tương ứng (xem tại [danh sách phía dưới](https://github.com/trvqhuy/nestup_evn#3-m%C3%A3-kh%C3%A1ch-h%C3%A0ng-v%C3%A0-t%C3%A0i-kho%E1%BA%A3n-evn)).
+Từ việc sử dụng các phương thức có sẵn của module **AIOHTTP** thông qua những giao thức **HTTP(S)** cơ bản, công cụ cho phép theo dõi dữ liệu điện năng tiêu thụ từ [EVN](https://www.evn.com.vn) trực tiếp trên UI [Home Assistant](https://www.home-assistant.io), hiện tại đã hỗ trợ cho **tất cả vùng miền** tại Việt Nam cùng với chi nhánh EVN tương ứng (xem tại [danh sách phía dưới](https://github.com/chautruongthinh/nestup_evn#3-m%C3%A3-kh%C3%A1ch-h%C3%A0ng-v%C3%A0-t%C3%A0i-kho%E1%BA%A3n-evn)).
 
 ### Các tính năng cơ bản
 1. Thiết lập và theo dõi **nhiều mã khách hàng** cùng một lúc, trên cùng **một máy chủ HA**.
@@ -18,8 +18,8 @@ Từ việc sử dụng các phương thức có sẵn của module **AIOHTTP** 
 ### Các điểm hạn chế
 1. Chưa hoàn toàn hỗ trợ thêm sensor vào **Energy**.
 2. Chưa hỗ trợ đối tượng khác ngoài các hộ sinh hoạt tiêu thụ điện 2 pha thông thường.
-3. Sensors về **tiền điện ngày / tháng** chỉ mang tính chất tham khảo, được tính một cách **thủ công** theo [giá bán lẻ bên dưới](https://github.com/trvqhuy/nestup_evn#2-gi%C3%A1-b%C3%A1n-l%E1%BA%BB-%C4%91i%E1%BB%87n-evn), vì vậy khả năng **sai số** là **rất cao**.
-4. Các thông tin không được cập nhật **tức thì** từ dữ liệu mới nhất của EVN, mà luôn được cập nhật theo [chu kì cố định](https://github.com/trvqhuy/nestup_evn#3-chu-k%C3%AC-c%E1%BA%ADp-nh%E1%BA%ADt-d%E1%BB%AF-li%E1%BB%87u-m%E1%BB%9Bi-t%E1%BB%AB-evn).
+3. Sensors về **tiền điện ngày / tháng** chỉ mang tính chất tham khảo, được tính một cách **thủ công** theo [giá bán lẻ bên dưới](https://github.com/chautruongthinh/nestup_evn#2-gi%C3%A1-b%C3%A1n-l%E1%BA%BB-%C4%91i%E1%BB%87n-evn), vì vậy khả năng **sai số** là **rất cao**.
+4. Các thông tin không được cập nhật **tức thì** từ dữ liệu mới nhất của EVN, mà luôn được cập nhật theo [chu kì cố định](https://github.com/chautruongthinh/nestup_evn#3-chu-k%C3%AC-c%E1%BA%ADp-nh%E1%BA%ADt-d%E1%BB%AF-li%E1%BB%87u-m%E1%BB%9Bi-t%E1%BB%AB-evn).
 
 <p align="center">
 <img src="screenshots/ui_display.png" height="300"> <img src="screenshots/device_info.png" height="300">
@@ -32,7 +32,7 @@ Từ việc sử dụng các phương thức có sẵn của module **AIOHTTP** 
 4. **Chỉ số** mới nhất và chỉ số cũ từ ngày đầu kì (ngày bắt đầu hóa đơn tháng).
 5. **Ngày** cập nhật dữ liệu mới nhất cùng với ngày đầu kì.
 
-    > Xem thêm [Ý nghĩa của các sensors](https://github.com/trvqhuy/nestup_evn#1-%C3%BD-ngh%C4%A9a-c%E1%BB%A7a-c%C3%A1c-sensor-%C4%91%C6%B0%E1%BB%A3c-t%E1%BA%A1o-s%E1%BA%B5n) phía dưới để hiểu rõ chức năng / hạn chế của từng thông số trên.
+    > Xem thêm [Ý nghĩa của các sensors](https://github.com/chautruongthinh/nestup_evn#1-%C3%BD-ngh%C4%A9a-c%E1%BB%A7a-c%C3%A1c-sensor-%C4%91%C6%B0%E1%BB%A3c-t%E1%BA%A1o-s%E1%BA%B5n) phía dưới để hiểu rõ chức năng / hạn chế của từng thông số trên.
 
 <p align="center">
 <img src="screenshots/sensors_display.png">
@@ -45,7 +45,7 @@ Công cụ chỉ hỗ trợ cho loại công tơ **điện tử đo xa ghi theo 
 - Không phải tất cả công tơ **điện tử** đều hỗ trợ đọc chỉ số từ xa **(đo xa)**.
 - Không phải tất cả công tơ **điện tử đo xa** đều hỗ trợ **ghi theo ngày**.
 
-    > Để đảm bảo công tơ nhà bạn đủ điều kiện để sử dụng công cụ, xin hãy truy cập vào link [Đăng nhập](https://github.com/trvqhuy/nestup_evn#3-m%C3%A3-kh%C3%A1ch-h%C3%A0ng-v%C3%A0-t%C3%A0i-kho%E1%BA%A3n-evn) phía dưới (xin chọn tương ứng với khu vực EVN của bạn).
+    > Để đảm bảo công tơ nhà bạn đủ điều kiện để sử dụng công cụ, xin hãy truy cập vào link [Đăng nhập](https://github.com/chautruongthinh/nestup_evn#3-m%C3%A3-kh%C3%A1ch-h%C3%A0ng-v%C3%A0-t%C3%A0i-kho%E1%BA%A3n-evn) phía dưới (xin chọn tương ứng với khu vực EVN của bạn).
     
     > Nếu như bạn có thể theo dõi được **sản lượng theo ngày** trên website hoặc app chính thức của EVN, thì công tơ nhà bạn thích hợp để sử dụng công cụ này.
 
@@ -67,7 +67,7 @@ Hiện tại tất cả chi nhánh, vùng miền đều **cần phải có tài 
 |:---:|:---:|:---:|:---:|:---:|
 | EVNHANOI | Thủ đô Hà Nội | ☑️ | [Link](https://evnhanoi.vn/user/login)| [Link](https://evnhanoi.vn/infomation/lien-he)
 | EVNHCMC | Thành phố Hồ Chí Minh | ☑️ | [Link](https://cskh.evnhcmc.vn/)| [Link](https://cskh.evnhcmc.vn/lienhe)
-| EVNNPC | Khu vực miền Bắc |  | [Link](https://cskh.npc.com.vn/home/AccountNPC)| [Link](https://cskh.npc.com.vn/Home/LienHeNPC)
+| EVNNPC | Khu vực miền Bắc | ☑️ | [Link](https://cskh.npc.com.vn/home/AccountNPC)| [Link](https://cskh.npc.com.vn/Home/LienHeNPC)
 | EVNCPC | Khu vực miền Trung | ☑️ | [Link](https://cskh.cpc.vn/dang-nhap)| [Link](https://cskh.cpc.vn/lien-he)
 | EVNSPC | Khu vực miền Nam | ☑️ | [Link](https://www.cskh.evnspc.vn/TaiKhoan/DangNhap)| [Link](https://cskh.evnspc.vn/LienHe/CacKenhTrucTuyen)
 
@@ -81,10 +81,10 @@ Hiện tại tất cả chi nhánh, vùng miền đều **cần phải có tài 
 > HACS > Integrations > ➕ Explore & download repositories  > `EVN Data Fetcher` > `Chọn phiên bản mới nhất` > Download this repository
     
 3. Khởi động lại HomeAssistant.
-4. Cài đặt thành công, tiếp theo đến bước [Config](https://github.com/trvqhuy/nestup_evn#thi%E1%BA%BFt-l%E1%BA%ADp-v%C3%A0-ch%E1%BB%89nh-s%E1%BB%ADa) để hoàn thành.
+4. Cài đặt thành công, tiếp theo đến bước [Config](https://github.com/chautruongthinh/nestup_evn#thi%E1%BA%BFt-l%E1%BA%ADp-v%C3%A0-ch%E1%BB%89nh-s%E1%BB%ADa) để hoàn thành.
 
 ### Cách 2: Cài đặt thủ công thông qua Samba / SFTP
-1. Tải phiên bản mới nhất của công cụ thông qua [Github](https://github.com/trvqhuy/nestup_evn.git).
+1. Tải phiên bản mới nhất của công cụ thông qua [Github](https://github.com/chautruongthinh/nestup_evn.git).
 
 2. Giải nén thư mục `custom_components/nestup_evn` vào thư mục `custom_components` trong HomeAssistant của bạn.
     - Thư mục `custom_components` phụ thuộc vào **thư mục cài đặt** HomeAssistant của bạn. 
@@ -196,7 +196,7 @@ Do thiếu sự đồng bộ về các khái niệm chỉ số điện năng gi�
 
 - **Sản lượng tháng**: là sản lượng điện tiêu thụ được tính (theo lý thuyết) từ **00:00** của **ngày đầu kì** đến **23:59** của **ngày tạm chốt** (khác đối với EVNCPC).
 
-Để thuận tiện hơn trong việc theo dõi điện tiêu thụ hàng ngày (ví dụ ước lượng số tiền điện mình sử dụng trong ngày). 2 sensors bên dưới chỉ mang **tính chất tham khảo**, không được lấy trực tiếp từ dữ liệu EVN, mà được tính theo [giá bán lẻ bên dưới](https://github.com/trvqhuy/nestup_evn#2-gi%C3%A1-b%C3%A1n-l%E1%BA%BB-%C4%91i%E1%BB%87n-evn) nên khả năng **sai số là rất cao***
+Để thuận tiện hơn trong việc theo dõi điện tiêu thụ hàng ngày (ví dụ ước lượng số tiền điện mình sử dụng trong ngày). 2 sensors bên dưới chỉ mang **tính chất tham khảo**, không được lấy trực tiếp từ dữ liệu EVN, mà được tính theo [giá bán lẻ bên dưới](https://github.com/chautruongthinh/nestup_evn#2-gi%C3%A1-b%C3%A1n-l%E1%BA%BB-%C4%91i%E1%BB%87n-evn) nên khả năng **sai số là rất cao***
 
 - Các sensors **tiền điện ngày**: được tính từ các sensors **sản lượng ngày**.
 
@@ -215,9 +215,20 @@ Mặc dù có nhiều loại biểu giá tùy vào mục đích sử dụng đi�
 > - Để các sensors luôn cập nhật được dữ liệu mới nhất từ EVN.
 > - Thời điểm cập nhật dữ liệu điện năng của hơn 400 chi nhánh EVN toàn quốc là không cố định.
 
+## Lưu ý dành cho người dùng EVN NPC
+
+Do app cũ không lấy được chỉ số điện tiêu thụ mỗi ngày nên phải chuyển sang app mới. Mọi người vui lòng tải app mới rồi đăng kí tài khoản thì mới lấy được dữ liệu điện năng tiêu thụ.
+Link tải ứng dụng mới:
+
+- ANDROID: https://play.google.com/store/apps/details?id=com.evn.cskh.vn&hl=vi
+
+- IOS: https://apps.apple.com/vn/app/evn-cskh/id6754793134
+
 ## Dành cho dự án
 
 #### Xin phép được gửi lời cảm ơn đến:
+
+- Anh **Trvqhuy** tác giả của bộ source này
 
 - Anh **Pham Dinh Hai**, anh **Huynh Nhat** và anh **Dương Thanh Bắc**, vì đã tin tưởng, cung cấp thông tin tài khoản EVNHANOI, EVNNPC và EVNCPC, nhờ vậy tác giả đã có đủ điều kiện cần thiết để hỗ trợ cho khu vực Hà Nội, miền Bắc và miền Trung Việt Nam.  
 
@@ -232,6 +243,6 @@ Mặc dù có nhiều loại biểu giá tùy vào mục đích sử dụng đi�
 [black-badge]: https://img.shields.io/badge/code%20style-black%20&%20flake8-262626.svg?style=for-the-badge
 [black]: https://github.com/ambv/black
 [maintenance-badge]: https://img.shields.io/badge/MAINTAINER-%40TRVQHUY-F2994B?style=for-the-badge
-[maintenance]: https://github.com/trvqhuy
+[maintenance]: https://github.com/chautruongthinh
 [license-badge]: https://img.shields.io/badge/license-apache2.0-F2994B.svg?style=for-the-badge
-[license]: https://github.com/trvqhuy/nestup_evn/blob/main/custom_components/nestup_evn/LICENSE
+[license]: https://github.com/chautruongthinh/nestup_evn/blob/main/custom_components/nestup_evn/LICENSE
