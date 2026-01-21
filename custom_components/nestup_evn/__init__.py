@@ -2,14 +2,39 @@ from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 
-from .const import DOMAIN
+from .const import (
+    DOMAIN,
+    CONF_AREA,
+    CONF_USERNAME,
+    CONF_PASSWORD,
+    CONF_CUSTOMER_ID,
+    CONF_MONTHLY_START,
+)
+from .nestup_evn import EVNAPI
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Establish connection with EVN Cloud."""
-    hass.data.setdefault(DOMAIN, {}).setdefault(entry.entry_id, {}).update(entry.data)
+    """Set up nestup_evn from a config entry."""
+
+    api = EVNAPI(hass, True)
+
+    try:
+        await api.request_update(
+            entry.data.get(CONF_AREA),
+            entry.data.get(CONF_USERNAME),
+            entry.data.get(CONF_PASSWORD),
+            entry.data.get(CONF_CUSTOMER_ID),
+            entry.data.get(CONF_MONTHLY_START),
+        )
+    except Exception as err:
+        raise ConfigEntryNotReady(str(err)) from err
+
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = entry.data
+
     await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
+
     return True
 
 

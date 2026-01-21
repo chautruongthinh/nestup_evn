@@ -5,6 +5,7 @@ from typing import Any
 import os
 import json
 
+from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.components.sensor import (
     DOMAIN as ENTITY_DOMAIN,
     SensorEntity,
@@ -28,12 +29,17 @@ from .const import (
     CONF_DEVICE_NAME,
     CONF_DEVICE_SW_VERSION,
     CONF_ERR_INVALID_AUTH,
+    CONF_ERR_UNKNOWN,
     CONF_MONTHLY_START,
     CONF_PASSWORD,
     CONF_SUCCESS,
     CONF_USERNAME,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
+    ID_ECON_DAILY_NEW,
+    ID_ECON_DAILY_OLD,
+    ID_ECOST_DAILY_NEW,
+    ID_ECOST_DAILY_OLD,
 )
 from .types import EVN_SENSORS, EVNSensorEntityDescription
 
@@ -86,46 +92,31 @@ class EVNDevice:
             )
         except Exception as ex:
             _LOGGER.error("Error loading branches data: %s", str(ex))
-
+            
     async def update(self) -> dict[str, Any]:
         """Update device data from EVN Endpoints."""
 
-        self._data = await self._api.request_update(
-            self._area_name, self._username, self._password, self._customer_id, self._monthly_start
+        data = await self._api.request_update(
+            self._area_name,
+            self._username,
+            self._password,
+            self._customer_id,
+            self._monthly_start,
         )
 
-        status = self._data.get("status")
+        status = data.get("status")
 
         if status != CONF_SUCCESS:
-
-            if status == CONF_ERR_INVALID_AUTH:
-                _LOGGER.info(
-                    "[EVN ID %s] Expired session, try reauthenticating.",
-                    self._customer_id,
-                )
-
-                login_state = await self._api.login(
-                    self._area_name, self._username, self._password
-                )
-
-                if login_state == CONF_SUCCESS:
-                    self._data = await self._api.request_update(
-                        self._area_name, self._customer_id, self._monthly_start
-                    )
-                    status = self._data.get("status")
-
-        if status == CONF_SUCCESS:
-            _LOGGER.info(
-                "[EVN ID %s] Successfully fetched new data from EVN Server.",
-                self._customer_id,
+            raise UpdateFailed(
+                f"EVN update failed ({self._customer_id}): {status}"
             )
 
-        else:
-            _LOGGER.warn(
-                "[EVN ID %s] Could not fetch new data - %s",
-                self._customer_id,
-                self._data.get("data"),
-            )
+        self._data = data
+
+        _LOGGER.info(
+            "[EVN ID %s] Successfully fetched new data from EVN Server.",
+            self._customer_id,
+        )
 
         return self._data
 
@@ -196,7 +187,14 @@ class EVNSensor(CoordinatorEntity, SensorEntity):
         self._attr_name = f"{device._name} {description.name}"
         self._unique_id = str(f"{device._customer_id}_{description.key}").lower()
         self._default_name = description.name
-
+        name = description.name
+        if device._area_name.get("name") == "EVNCPC":
+            if description.key in (ID_ECON_DAILY_NEW, ID_ECOST_DAILY_NEW):
+                name = name.replace("hôm qua", "hôm nay")
+            elif description.key in (ID_ECON_DAILY_OLD, ID_ECOST_DAILY_OLD):
+                name = name.replace("hôm kia", "hôm qua")
+        self._attr_name = f"{device._name} {name}"
+        self._unique_id = f"{device._customer_id}_{description.key}".lower()
         self.entity_id = (
             f"{ENTITY_DOMAIN}.{device._customer_id}_{description.key}".lower()
         )
@@ -244,7 +242,7 @@ class EVNSensor(CoordinatorEntity, SensorEntity):
     def available(self) -> bool:
         """Return the availability of the sensor."""
         return (
-            self._device._data["status"] == CONF_SUCCESS
+            self._device._data.get("status") == CONF_SUCCESS
             and self.native_value is not None
         )
 

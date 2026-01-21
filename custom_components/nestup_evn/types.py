@@ -111,7 +111,7 @@ VIETNAM_EVN_AREA = [
         location="Khu vực miền Trung",
         evn_login_url="https://cskh-api.cpc.vn/connect/token",
         evn_data_url="https://cskh-api.cpc.vn/api/cskh/power-consumption-alerts/by-customer-code/",
-        evn_payment_url="https://appcskh.cpc.vn:4433/api/v4/customer/home/",
+        evn_payment_url="https://cskh-api.cpc.vn/api/remote/app/home/",
         date_needed=False,
         pattern=["PQ", "PC", "PP"],
     ),

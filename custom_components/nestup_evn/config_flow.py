@@ -141,10 +141,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._user_data.get(CONF_MONTHLY_START),
             )
 
-            if res.get("status") is CONF_SUCCESS:
+            status = res.get("status")
+            if status == CONF_SUCCESS:
                 return CONF_SUCCESS
 
-            return res.get("status", CONF_ERR_UNKNOWN)
+            return status if isinstance(status, str) else CONF_ERR_UNKNOWN
 
         except Exception as ex:
             _LOGGER.exception("Unexpected exception while verifying ID: %s", ex)

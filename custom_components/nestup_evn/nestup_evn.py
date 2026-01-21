@@ -299,33 +299,30 @@ class EVNAPI:
         payload = {
             "username": username,
             "password": password,
-            "scope": "CSKH",
+            "scope": "CSKH offline_access",
             "grant_type": "password",
         }
 
-        basic_auth = "CSKH_Swagger:1q2w3e*"
+        basic_auth = "CSKH_Mobile_Notification:Evncpc@CC2023!Annv1609#"
         auth_header = base64.b64encode(basic_auth.encode()).decode()
 
         headers = {
-            "Authorization": f"Basic {auth_header}",
-            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36",
+            "Authorization": f"Basic {auth_header}",            
             "Accept": "application/json",
-            "Accept-Encoding": "gzip, deflate, br",
-            "Connection": "keep-alive",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": "okhttp/4.9.2",
         }
 
         resp = await self._session.post(
-            url=self._evn_area.get("evn_login_url"), data=payload, headers=headers
+            self._evn_area["evn_login_url"], data=payload, headers=headers
         )
 
-        status, resp_json = await json_processing(resp)
-        if status != CONF_SUCCESS:
-            return status
-
-        if ("error" in resp_json) and (resp_json["error"] == "invalid_grant"):
+        try:
+            resp_json = await resp.json()
+        except Exception:
             return CONF_ERR_INVALID_AUTH
 
-        elif "access_token" in resp_json:
+        if resp_json.get("access_token"):
             self._evn_area["access_token"] = resp_json["access_token"]
             return CONF_SUCCESS
 
@@ -765,7 +762,7 @@ class EVNAPI:
 
         headers = {
             "Authorization": f"Bearer {self._evn_area.get('access_token')}",
-            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36",
+            "User-Agent": "okhttp/4.9.2",
             "Accept": "application/json",
             "Accept-Encoding": "gzip, deflate, br",
             "Connection": "keep-alive",
@@ -776,23 +773,30 @@ class EVNAPI:
             headers=headers,
         )
 
-        status, resp_json = await json_processing(resp)
+        _, resp_json = await json_processing(resp)
 
-        if status != CONF_SUCCESS:
-            return resp_json
+        electric = (
+            resp_json.get("electricConsumption")
+            if isinstance(resp_json, dict)
+            else None
+        )
 
+        if not electric or not isinstance(electric, dict):
+            return {
+                "status": CONF_ERR_NO_MONITOR,
+                "raw": resp_json,
+            }
+            
         fetched_data = {
             "status": CONF_SUCCESS,
             ID_ECON_DAILY_NEW: round(
-                float(resp_json["electricConsumption"]["electricConsumptionToday"]), 2
+                float(electric.get("electricConsumptionToday", 0)), 2
             ),
             ID_ECON_DAILY_OLD: round(
-                float(resp_json["electricConsumption"]["electricConsumptionYesterday"]),
-                2,
+                float(electric.get("electricConsumptionYesterday", 0)), 2
             ),
             ID_ECON_MONTHLY_NEW: round(
-                float(resp_json["electricConsumption"]["electricConsumptionThisMonth"]),
-                2,
+                float(electric.get("electricConsumptionThisMonth", 0)), 2
             ),
         }
 
@@ -801,56 +805,50 @@ class EVNAPI:
             headers=headers,
         )
 
-        status, resp_json = await json_processing(resp)
+        _, resp_json = await json_processing(resp)
 
-        if status != CONF_SUCCESS:
-            return resp_json
+        response = (
+            resp_json.get("response")
+            if isinstance(resp_json, dict)
+            else None
+        )
 
+        if not response or not isinstance(response, dict):
+            return {
+                "status": CONF_ERR_NO_MONITOR,
+                "raw": resp_json,
+            }
+
+        payment_status = STATUS_PAYMENT_NEEDED
         m_payment_status = 0
-        payment_status = CONF_ERR_UNKNOWN
 
-        if resp_json["status"] == 0:
-            if "tinhTrangThanhToan" in resp_json["response"]:
-                if resp_json["response"].get("tinhTrangThanhToan") == "Đã thanh toán":
-                    payment_status = STATUS_N_PAYMENT_NEEDED
-                else:
-                    payment_status = STATUS_PAYMENT_NEEDED
+        if response.get("tinhTrangThanhToan") == "Đã thanh toán":
+            payment_status = STATUS_N_PAYMENT_NEEDED
+        else:
+            try:
+                m_payment_status = int(
+                    response.get("tienHoaDon", "0")
+                    .replace(".", "")
+                    .replace("đ", "")
+                )
+            except Exception:
+                m_payment_status = 0
 
-                    if "tienHoaDon" in resp_json["response"]:
-                        m_payment_status = int(
-                            resp_json["response"]["tienHoaDon"]
-                            .replace(".", "")
-                            .replace("đ", "")
-                        )
-
-        current_einfo = resp_json["response"].get("dienNangHienTai")
+        current_einfo = response.get("dienNangHienTai", {})
 
         try:
             to_date = datetime.strptime(
                 current_einfo.get("thoiDiem"), "%Hh%M - %d/%m/%Y"
             )
         except Exception:
-            to_date = datetime.now().date()
+            to_date = datetime.now()
 
         fetched_data.update(
             {
                 ID_PAYMENT_NEEDED: payment_status,
                 ID_M_PAYMENT_NEEDED: m_payment_status,
-                ID_ECON_TOTAL_NEW: round(
-                    float(
-                        current_einfo.get("chiSo").replace(".", "").replace(",", ".")
-                    ),
-                    2,
-                ),
-                ID_ECON_TOTAL_OLD: round(
-                    float(
-                        resp_json["response"]
-                        .get("chiSoCuoiKy")
-                        .replace(".", "")
-                        .replace(",", ".")
-                    ),
-                    2,
-                ),
+                ID_ECON_TOTAL_NEW: round(float(current_einfo.get("chiSo", "0").replace(".", "").replace(",", ".")), 2),
+                ID_ECON_TOTAL_OLD: round(float(response.get("chiSoCuoiKy", "0").replace(".", "").replace(",", ".")), 2),
                 "to_date": to_date,
                 "previous_date": to_date - timedelta(days=1),
             }
