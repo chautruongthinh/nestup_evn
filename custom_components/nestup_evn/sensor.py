@@ -5,6 +5,8 @@ from typing import Any
 import os
 import json
 
+from .data_storage import EVNDataStorage
+
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.components.sensor import (
     DOMAIN as ENTITY_DOMAIN,
@@ -82,6 +84,7 @@ class EVNDevice:
         self._api = api
         self._data = {}
         self._branches_data = None  # Will store the branch data
+        self._storage = EVNDataStorage(self.hass, self._customer_id)  # Data storage
 
     async def async_load_branches(self):
         """Load EVN branches data asynchronously"""
@@ -113,6 +116,9 @@ class EVNDevice:
 
         self._data = data
 
+        # Save historical data
+        await self._storage.async_update_from_sensor_data(data)
+
         _LOGGER.info(
             "[EVN ID %s] Successfully fetched new data from EVN Server.",
             self._customer_id,
@@ -130,7 +136,10 @@ class EVNDevice:
             return
 
         await self.async_load_branches()
-
+        
+        # Load historical data
+        await self._storage.async_load()
+        
         coordinator = DataUpdateCoordinator(
             hass,
             _LOGGER,

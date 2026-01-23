@@ -18,6 +18,9 @@ from homeassistant.helpers.aiohttp_client import (
     async_get_clientsession,
 )
 
+from .data_storage import EVNDataStorage
+from .const import CONF_HISTORY_START_DATE
+
 from .const import (
     CONF_EMPTY,
     CONF_ERR_CANNOT_CONNECT,
@@ -951,18 +954,85 @@ class EVNAPI:
 
         return fetched_data
 
-    async def get_evn_info(self, customer_id):
-        """Get EVN branch info"""
-        file_path = os.path.join(os.path.dirname(__file__), "evn_branches.json")
+    async def fetch_daily_range_evnspc(
+        self,
+        customer_id: str,
+        from_date: str,
+        to_date: str,
+        last_index: str = "001",
+    ):
+        """
+        Fetch raw daily data list from EVN SPC.
+        from_date, to_date: string DD-MM-YYYY
+        """
+        from_date_str = (
+            parser.parse(from_date, dayfirst=True) - timedelta(days=1)
+        ).strftime("%Y%m%d")
+        to_date_str = parser.parse(to_date, dayfirst=True).strftime("%Y%m%d")
 
-        async def async_load_json():
-            try:
-                return await self.hass.async_add_executor_job(read_evn_branches_file, file_path)
-            except Exception as ex:
-                _LOGGER.error("Error loading EVN branch info: %s", str(ex))
-                return None
+        headers = {
+            "User-Agent": "evnapp/59 CFNetwork/1240.0.4 Darwin/20.6.0",
+            "Authorization": f"Bearer {self._evn_area.get('access_token')}",
+            "Accept": "application/json",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Accept-Language": "vi-vn",
+            "Connection": "keep-alive",
+        }
 
-        return await async_load_json()
+        status, resp_json = await fetch_with_retries(
+            url=self._evn_area.get("evn_data_url"),
+            headers=headers,
+            params={
+                "strMaDiemDo": f"{customer_id}{last_index}",
+                "strFromDate": from_date_str,
+                "strToDate": to_date_str,
+            },
+            session=self._session,
+            api_name="Fetch EVN daily raw data"
+        )
+
+        if status != CONF_SUCCESS or not resp_json:
+            return []
+
+        return resp_json
+
+    async def fetch_monthly_bills_evnspc(
+        self,
+        customer_id: str,
+        from_month: int,
+        from_year: int,
+        to_month: int,
+        to_year: int,
+    ):
+        """
+        Fetch monthly bill history for EVN SPC.
+        """
+        headers = {
+            "User-Agent": "okhttp/3.12.12",
+            "Authorization": f"Bearer {self._evn_area.get('access_token')}",
+            "Accept": "application/json",
+            "Accept-Encoding": "gzip",
+        }
+
+        status, resp_json = await fetch_with_retries(
+            url="https://api.cskh.evnspc.vn/api/NghiepVu/TraCuuHoaDon",
+            headers=headers,
+            params={
+                "strMaKH": customer_id,
+                "iTuThang": from_month,
+                "iTuNam": from_year,
+                "iDenThang": to_month,
+                "iDenNam": to_year,
+            },
+            session=self._session,
+            api_name="Fetch EVN monthly bills"
+        )
+
+        if status != CONF_SUCCESS or not resp_json:
+            return []
+
+        return resp_json
+
 
 async def json_processing(resp):
     resp_json: dict = {}
