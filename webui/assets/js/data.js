@@ -321,9 +321,29 @@ class DataManager {
         const billingCycle = this.getBillingCycle();
         console.log('📅 getUniqueMonths - billing cycle:', billingCycle);
 
+        // Collect unique months from multiple sources
+        let uniqueMonthsSet = new Set();
+
+        // 1. From Daily Data
+        if (this.dailyData && Array.isArray(this.dailyData)) {
+            this.dailyData.forEach(day => {
+                if (day.Ngày) uniqueMonthsSet.add(day.Ngày.slice(3, 10));
+            });
+        }
+
+        // 2. From Monthly Data (Fallback if daily data is missing)
+        if (this.monthlyData && this.monthlyData.SanLuong && Array.isArray(this.monthlyData.SanLuong)) {
+            this.monthlyData.SanLuong.forEach(item => {
+                if (item.Tháng && item.Năm) {
+                    const monthStr = item.Tháng.toString().padStart(2, '0');
+                    uniqueMonthsSet.add(`${monthStr}-${item.Năm}`);
+                }
+            });
+        }
+
         if (billingCycle.type === 'calendar') {
             // Chu kỳ theo tháng dương lịch (cũ)
-            const uniqueMonths = [...new Set(this.dailyData.map(day => day.Ngày.slice(3, 10)))];
+            const uniqueMonths = [...uniqueMonthsSet];
             const result = uniqueMonths.sort((a, b) =>
                 new Date(b.split('-').reverse().join('-')) -
                 new Date(a.split('-').reverse().join('-'))
@@ -332,7 +352,7 @@ class DataManager {
             return result;
         } else if (billingCycle.type === 'cycle' && billingCycle.startDay === 1) {
             // Chu kỳ được cấu hình thủ công từ ngày 1 - xử lý như tháng dương lịch nhưng với "Kỳ này"
-            const uniqueMonths = [...new Set(this.dailyData.map(day => day.Ngày.slice(3, 10)))];
+            const uniqueMonths = [...uniqueMonthsSet];
             const sortedMonths = uniqueMonths.sort((a, b) =>
                 new Date(b.split('-').reverse().join('-')) -
                 new Date(a.split('-').reverse().join('-'))
@@ -354,11 +374,24 @@ class DataManager {
             return sortedMonths;
         } else {
             // Chu kỳ thanh toán tùy chỉnh - tạo danh sách kỳ thanh toán
-            const result = this.generateBillingPeriods(billingCycle.startDay);
-            console.log('📅 Custom billing cycle result:', result);
-            return result;
+            // Nếu không có daily data, việc tạo kỳ thanh toán sẽ khó khăn
+            // Fallback về calendar months nếu không generate được periods
+            const periods = this.generateBillingPeriods(billingCycle.startDay);
+
+            if (periods.length === 0 && uniqueMonthsSet.size > 0) {
+                console.log('📅 Custom billing cycle but no daily data - fallback to calendar months');
+                const uniqueMonths = [...uniqueMonthsSet];
+                return uniqueMonths.sort((a, b) =>
+                    new Date(b.split('-').reverse().join('-')) -
+                    new Date(a.split('-').reverse().join('-'))
+                );
+            }
+
+            console.log('📅 Custom billing cycle result:', periods);
+            return periods;
         }
-    }// Tạo danh sách các kỳ thanh toán từ dữ liệu có sẵn
+    }
+    // Tạo danh sách các kỳ thanh toán từ dữ liệu có sẵn
     generateBillingPeriods(startDay) {
         // Lấy ngày đầu tiên và cuối cùng từ dữ liệu
         const dates = this.dailyData.map(day => new Date(day.Ngày.split('-').reverse().join('-')))

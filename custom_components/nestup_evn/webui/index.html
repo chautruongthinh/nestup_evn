@@ -47,14 +47,6 @@
                 <select id="monthSelect" class="p-2 rounded-lg bg-gray-800 text-white w-full md:w-auto text-sm">
                     <!-- Options will be populated by JavaScript -->
                 </select>                <div class="header-buttons-container flex flex-row w-full md:w-auto gap-2">
-                    <button id="billingCycleBtn" class="btn px-2 py-1 opacity-80 hover:opacity-100 flex-shrink-0 text-xs h-8 md:h-auto min-h-[32px]" 
-                            style="background: linear-gradient(135deg, #e961ab, #6b46c1); border: none; font-size: 10px; padding-left: 8px; padding-right: 8px;">
-                        <i class="fas fa-cog"></i> <span class="hidden xs:inline md:inline">Cấu hình chu kỳ</span>
-                        <span class="inline xs:hidden md:hidden"><i class="fas fa-cog"></i></span>
-                    </button>
-                    <button id="configBtn" class="btn px-2 py-1 opacity-80 hover:opacity-100 flex-shrink-0 text-xs h-8 md:h-auto min-h-[32px]" type="button">
-  <i class="fas fa-sliders-h"></i> <span>Config</span>
-</button>
                     <div class="flex-1 md:flex-none">
                         <select id="themeSelect" class="p-2 rounded-lg bg-gray-800 text-white w-full md:w-auto text-sm theme-selector h-8 md:h-auto min-h-[32px]">
                             <option value="dark-gradient">🌙 Dark Gradient</option>
@@ -243,7 +235,6 @@
     <script src="assets/js/charts.js"></script>
     <script src="assets/js/ui.js"></script>
     <script src="assets/js/main.js"></script>
-    <script src="assets/js/config-modal.js"></script>
     <!-- Đảm bảo KHÔNG có bất kỳ lệnh nào như showConfigModal() hoặc document.getElementById('configModal').classList.remove('hidden') chạy khi load trang. -->
 </body>
 </html>

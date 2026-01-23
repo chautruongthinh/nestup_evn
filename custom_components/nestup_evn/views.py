@@ -81,8 +81,9 @@ class EVNStaticView(HomeAssistantView):
             content_type = "application/octet-stream"
             
         # Force UTF-8 for text/* and application/javascript
+        charset = None
         if content_type.startswith("text/") or content_type == "application/javascript":
-            content_type += "; charset=utf-8"
+            charset = "utf-8"
 
         # Read and return file
         try:
@@ -92,6 +93,7 @@ class EVNStaticView(HomeAssistantView):
             return web.Response(
                 body=content,
                 content_type=content_type,
+                charset=charset,
                 headers={
                     "Cache-Control": "no-cache, no-store, must-revalidate",
                     "Pragma": "no-cache",
@@ -100,4 +102,4 @@ class EVNStaticView(HomeAssistantView):
             )
         except Exception as ex:
             _LOGGER.error("Error reading file %s: %s", file_path, str(ex))
-            return web.Response(status=500, text="Internal Server Error")
+            return web.Response(status=500, text=f"Internal Server Error: {str(ex)}")
