@@ -1,5 +1,6 @@
 """HTTP views for EVN integration."""
 
+import json
 import logging
 import mimetypes
 import os
@@ -7,9 +8,10 @@ from pathlib import Path
 
 from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
+from .const import DOMAIN, CONF_CUSTOMER_ID
+from .data_storage import EVNDataStorage
 
 _LOGGER = logging.getLogger(__name__)
-
 
 class EVNPingView(HomeAssistantView):
     """Simple ping endpoint to verify API is working."""
@@ -103,3 +105,89 @@ class EVNStaticView(HomeAssistantView):
         except Exception as ex:
             _LOGGER.error("Error reading file %s: %s", file_path, str(ex))
             return web.Response(status=500, text=f"Internal Server Error: {str(ex)}")
+
+class EVNOptionsView(HomeAssistantView):
+    """Return configured EVN accounts."""
+
+    url = "/api/nestup_evn/options"
+    name = "api:nestup_evn:options"
+    requires_auth = False
+
+    def __init__(self, hass):
+        self.hass = hass
+
+    async def get(self, request):
+        try:
+            hass = request.app["hass"]
+
+            accounts = []
+            added = set()
+
+            for entry in hass.config_entries.async_entries(DOMAIN):
+                cid = entry.data.get(CONF_CUSTOMER_ID)
+                if cid and cid not in added:
+                    accounts.append({
+                        "id": cid,
+                        "userevn": cid,
+                        "name": f"EVN {cid}",
+                        "customer_id": cid,
+                    })
+                    added.add(cid)
+
+            return web.json_response({
+                "accounts_json": json.dumps(accounts)
+            })
+
+        except Exception as ex:
+            return web.json_response(
+                {"error": str(ex)},
+                status=500,
+            )
+
+class EVNMonthlyDataView(HomeAssistantView):
+    """Return monthly EVN data."""
+
+    url = "/api/nestup_evn/monthly/{account}"
+    name = "api:nestup_evn:monthly"
+    requires_auth = False
+
+    def __init__(self, hass):
+        self.hass = hass
+
+    async def get(self, request, account):
+        try:
+            storage = EVNDataStorage(request.app["hass"], account)
+            await storage.async_load()
+
+            data = storage.get_data_for_webui()
+            return web.json_response(data["monthly"])
+
+        except Exception as ex:
+            return web.json_response(
+                {"error": str(ex)},
+                status=500,
+            )
+
+class EVNDailyDataView(HomeAssistantView):
+    """Return daily EVN data."""
+
+    url = "/api/nestup_evn/daily/{account}"
+    name = "api:nestup_evn:daily"
+    requires_auth = False
+
+    def __init__(self, hass):
+        self.hass = hass
+
+    async def get(self, request, account):
+        try:
+            storage = EVNDataStorage(request.app["hass"], account)
+            await storage.async_load()
+
+            data = storage.get_data_for_webui()
+            return web.json_response(data["daily"])
+
+        except Exception as ex:
+            return web.json_response(
+                {"error": str(ex)},
+                status=500,
+            )
