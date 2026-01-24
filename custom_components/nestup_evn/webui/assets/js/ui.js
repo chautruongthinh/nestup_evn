@@ -214,7 +214,7 @@ class UIManager {
 		if (summary.estimated) {
 			const badge = document.createElement('span');
 			badge.className = 'ml-2 text-xs text-yellow-400';
-			badge.textContent = '(ước tính)';
+			badge.textContent = '(tạm tính)';
 			totalCostEl.appendChild(badge);
 		}
 

@@ -237,24 +237,24 @@ class DataManager {
 	calculateSummary() {
 		const currentPeriod = this.calculateCurrentPeriod();
 
-		let totalCost = 0;
+		// ✅ 1. Tổng tiền hóa đơn đã chốt
+		const billedCost = this.monthlyData.TienDien.reduce(
+			(sum, item) => sum + parseInt(item["Tiền Điện"] || 0),
+			0
+		);
+
+		let totalCost = billedCost;
 		let estimated = false;
 
+		// ✅ 2. Nếu có kỳ hiện tại → cộng tiền tạm tính
 		if (currentPeriod && currentPeriod.isCurrentPeriod) {
-			// ✅ KỲ HIỆN TẠI → DÙNG TIỀN TẠM TÍNH
-			totalCost = currentPeriod.cost;
+			totalCost += currentPeriod.cost;
 			estimated = true;
-		} else {
-			// ✅ CÁC THÁNG ĐÃ CHỐT → DÙNG HÓA ĐƠN EVN
-			totalCost = this.monthlyData.TienDien.reduce(
-				(sum, item) => sum + parseInt(item["Tiền Điện"] || 0),
-				0
-			);
 		}
 
-		// Trung bình hàng tháng
+		// Trung bình hàng tháng (dựa trên hóa đơn đã chốt)
 		const avgMonthlyCost = this.monthlyData.TienDien.length
-			? totalCost / this.monthlyData.TienDien.length
+			? billedCost / this.monthlyData.TienDien.length
 			: 0;
 
 		// Tổng & trung bình sản lượng tháng
@@ -282,12 +282,13 @@ class DataManager {
 			: 0;
 
 		return {
-			totalCost,
-			estimated, // ⭐ QUAN TRỌNG: cho UI biết là tạm tính
+			totalCost,                 // ✅ ĐÃ CỘNG ĐÚNG
+			estimated,                 // true nếu có tiền tạm tính
 			avgMonthlyCost,
 			avgMonthlyConsumption,
 			avgDailyConsumption,
 			totalMonthlyConsumption,
+			billedCost,                // ⭐ BONUS: tổng hóa đơn đã chốt
 			currentPeriod
 		};
 	}
