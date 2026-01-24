@@ -39,10 +39,7 @@ class EVNDataStorage:
         self.storage_dir = hass.config.path("nestup_evn")
         os.makedirs(self.storage_dir, exist_ok=True)
 
-        self.file_path = os.path.join(
-            self.storage_dir,
-            f"{customer_id}.json",
-        )
+        self.file_path = os.path.join(self.storage_dir, f"{customer_id}.json")
 
         self._lock = asyncio.Lock()
         self._backfill_task: Optional[asyncio.Task] = None
@@ -93,9 +90,6 @@ class EVNDataStorage:
 
     async def async_update_from_sensor_data(self, data: dict) -> None:
         return
-
-    def is_backfill_done(self) -> bool:
-        return bool(self.data.get("meta", {}).get("backfill_done"))
 
     def _existing_daily_dates(self) -> set:
         dates = set()
@@ -177,13 +171,14 @@ class EVNDataStorage:
             key=lambda x: (x["Năm"], x["Tháng"])
         )
 
+    def is_backfill_done(self) -> bool:
+        return bool(self.data.get("meta", {}).get("backfill_done"))
+
     def start_background_backfill(self, api):
         if self.is_backfill_done():
             return
-
         if self._backfill_task and not self._backfill_task.done():
             return
-
         self._backfill_task = self.hass.async_create_task(
             self._async_run_backfill(api)
         )
@@ -214,8 +209,8 @@ class EVNDataStorage:
                 for start, end in self.get_missing_daily_ranges():
                     daily_raw = await api.fetch_daily_range_evnspc(
                         self.customer_id,
-                        start.strftime("%d-%m-%Y"),
-                        end.strftime("%d-%m-%Y"),
+                        start.strftime("%Y%m%d"),
+                        end.strftime("%Y%m%d"),
                     )
 
                     records = [
@@ -273,29 +268,58 @@ class EVNDataStorage:
                 )
 
     def get_data_for_webui(self) -> Dict:
-        """Return data formatted for WebUI."""
-        monthly_records = self.data.get("monthly", [])
-        
-        san_luong = []
-        tien_dien = []
-        
-        for r in monthly_records:
-            # Ensure safe access to keys
-            san_luong.append({
+        """
+        Return data EXACTLY in the format expected by data.js
+        """
+
+        # -------- DAILY --------
+        # data.js expects dailyData to be an ARRAY
+        daily_out = []
+        for d in self.data.get("daily", []):
+            daily_out.append({
+                "Ngày": d.get("Ngày"),
+                "Điện tiêu thụ (kWh)": float(d.get("Điện tiêu thụ (kWh)") or 0),
+                "Tiền điện (VND)": d.get("Tiền điện (VND)"),
+            })
+
+        # -------- MONTHLY --------
+        monthly_sanluong = []
+        monthly_tiendien = []
+
+        for r in self.data.get("monthly", []):
+            # Normalize keys
+            kwh = (
+                r.get("Điện tiêu thụ (KWh)")
+                if r.get("Điện tiêu thụ (KWh)") is not None
+                else r.get("Điện tiêu thụ (kWh)")
+            ) or 0
+
+            cost = (
+                r.get("Tiền Điện")
+                if r.get("Tiền Điện") is not None
+                else r.get("Tiền điện (VND)")
+            ) or 0
+
+            monthly_sanluong.append({
                 "Tháng": r.get("Tháng"),
                 "Năm": r.get("Năm"),
-                "Điện tiêu thụ (KWh)": r.get("Điện tiêu thụ (KWh)")
+                "Điện tiêu thụ (KWh)": int(kwh),
             })
-            tien_dien.append({
+
+            monthly_tiendien.append({
                 "Tháng": r.get("Tháng"),
                 "Năm": r.get("Năm"),
-                "Tiền Điện": r.get("Tiền Điện")
+                "Tiền Điện": int(cost),
             })
-            
+
         return {
-            "daily": self.data.get("daily", []),
+            # daily API MUST return array
+            "daily": daily_out,
+
+            # monthly API returns object with SanLuong / TienDien
             "monthly": {
-                "SanLuong": san_luong,
-                "TienDien": tien_dien
-            }
+                "SanLuong": monthly_sanluong,
+                "TienDien": monthly_tiendien,
+            },
         }
+

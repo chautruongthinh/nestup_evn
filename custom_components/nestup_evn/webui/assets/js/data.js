@@ -234,41 +234,64 @@ class DataManager {
             return dayDate >= startDate && dayDate <= endDate && day["Điện tiêu thụ (kWh)"] > 0;
         });
     }    // Tính toán thống kê tổng quan (bao gồm kỳ hiện tại)
-    calculateSummary() {
-        // Tổng tiền điện
-        const totalCost = this.monthlyData.TienDien.reduce((sum, item) =>
-            sum + parseInt(item["Tiền Điện"] || 0), 0
-        );
+	calculateSummary() {
+		const currentPeriod = this.calculateCurrentPeriod();
 
-        // Trung bình hàng tháng
-        const avgMonthlyCost = totalCost / this.monthlyData.TienDien.length || 0;
+		let totalCost = 0;
+		let estimated = false;
 
-        // Tổng và trung bình tiêu thụ hàng tháng
-        const totalMonthlyConsumption = this.monthlyData.SanLuong.reduce((sum, item) =>
-            sum + parseInt(item["Điện tiêu thụ (KWh)"] || 0), 0
-        );
-        const avgMonthlyConsumption = totalMonthlyConsumption / this.monthlyData.SanLuong.length || 0;
+		if (currentPeriod && currentPeriod.isCurrentPeriod) {
+			// ✅ KỲ HIỆN TẠI → DÙNG TIỀN TẠM TÍNH
+			totalCost = currentPeriod.cost;
+			estimated = true;
+		} else {
+			// ✅ CÁC THÁNG ĐÃ CHỐT → DÙNG HÓA ĐƠN EVN
+			totalCost = this.monthlyData.TienDien.reduce(
+				(sum, item) => sum + parseInt(item["Tiền Điện"] || 0),
+				0
+			);
+		}
 
-        // Trung bình hàng ngày
-        const validDailyData = this.dailyData.filter(day => day["Điện tiêu thụ (kWh)"] > 0);
-        const totalDailyConsumption = validDailyData.reduce((sum, day) =>
-            sum + day["Điện tiêu thụ (kWh)"], 0
-        );
-        const avgDailyConsumption = validDailyData.length ?
-            totalDailyConsumption / validDailyData.length : 0;
+		// Trung bình hàng tháng
+		const avgMonthlyCost = this.monthlyData.TienDien.length
+			? totalCost / this.monthlyData.TienDien.length
+			: 0;
 
-        // Tính toán kỳ hiện tại
-        const currentPeriod = this.calculateCurrentPeriod();
+		// Tổng & trung bình sản lượng tháng
+		const totalMonthlyConsumption = this.monthlyData.SanLuong.reduce(
+			(sum, item) => sum + parseInt(item["Điện tiêu thụ (KWh)"] || 0),
+			0
+		);
 
-        return {
-            totalCost,
-            avgMonthlyCost,
-            avgMonthlyConsumption,
-            avgDailyConsumption,
-            totalMonthlyConsumption,
-            currentPeriod // Thêm dữ liệu kỳ hiện tại
-        };
-    }    // Thiết lập chu kỳ thanh toán cho tài khoản
+		const avgMonthlyConsumption = this.monthlyData.SanLuong.length
+			? totalMonthlyConsumption / this.monthlyData.SanLuong.length
+			: 0;
+
+		// Trung bình ngày
+		const validDailyData = this.dailyData.filter(
+			d => d["Điện tiêu thụ (kWh)"] > 0
+		);
+
+		const totalDailyConsumption = validDailyData.reduce(
+			(sum, d) => sum + d["Điện tiêu thụ (kWh)"],
+			0
+		);
+
+		const avgDailyConsumption = validDailyData.length
+			? totalDailyConsumption / validDailyData.length
+			: 0;
+
+		return {
+			totalCost,
+			estimated, // ⭐ QUAN TRỌNG: cho UI biết là tạm tính
+			avgMonthlyCost,
+			avgMonthlyConsumption,
+			avgDailyConsumption,
+			totalMonthlyConsumption,
+			currentPeriod
+		};
+	}
+    // Thiết lập chu kỳ thanh toán cho tài khoản
     setBillingCycle(account, startDay, type = 'cycle') {
         console.log('🔧 setBillingCycle called:', { account, startDay, type });
         this.billingCycles[account] = { startDay, type };
@@ -524,13 +547,15 @@ class DataManager {
                     return itemMonth === targetMonth;
                 });
 
-                if (monthlyDataItem) {
-                    monthlyCost = parseInt(monthlyDataItem["Tiền Điện"] || 0);
-                } else if (index === 0) {
-                    // Nếu là kỳ hiện tại và không có dữ liệu từ monthlyData, tính tạm
-                    const costCalculation = this.tinhTienDien(totalConsumption);
-                    monthlyCost = costCalculation.total;
-                }                // Tính trend so với chu kỳ trước
+				if (index === 0) {
+					// ✅ KỲ HIỆN TẠI → LUÔN TÍNH TẠM
+					const costCalculation = this.tinhTienDien(totalConsumption);
+					monthlyCost = costCalculation.total;
+				} else if (monthlyDataItem) {
+					// ✅ THÁNG ĐÃ CHỐT → DÙNG HÓA ĐƠN EVN
+					monthlyCost = parseInt(monthlyDataItem["Tiền Điện"] || 0);
+				}
+                // Tính trend so với chu kỳ trước
                 if (index < recentMonths.length - 1) {
                     const prevMonth = recentMonths[index + 1];
                     let prevArr;

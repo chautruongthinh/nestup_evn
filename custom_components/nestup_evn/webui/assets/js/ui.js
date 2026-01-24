@@ -175,8 +175,8 @@ class UIManager {
                 <div class="summary-stat-inline">
                     <i class="fas fa-coins text-green-400"></i>
                     <span>Tiền:</span>
-                    <strong>${data.monthlyCost.toLocaleString()}</strong>
-                    <span>VND</span>
+					<strong>${data.monthlyCost.toLocaleString()}</strong>
+					<span>VND${data.isCurrentPeriod ? ' (tạm tính)' : ''}</span>
                 </div>                <div class="summary-stat-row">
                     <span class="min-value">
                         Min: <i class="fas fa-arrow-down text-blue-500"></i><strong class="text-blue-500">${data.min.toFixed(1)}</strong>
@@ -195,12 +195,33 @@ class UIManager {
     }
 
     // Update summary numbers with animation
-    updateSummaryNumbers(summary) {
-        this.animateCounterUp(document.getElementById('totalCost'), summary.totalCost, 0);
-        this.animateCounterUp(document.getElementById('avgMonthlyCost'), summary.avgMonthlyCost, 0);
-        this.animateCounterUp(document.getElementById('avgMonthlyConsumption'), summary.avgMonthlyConsumption, 2);
-        this.animateCounterUp(document.getElementById('avgDailyConsumption'), summary.avgDailyConsumption, 2);
-    }
+	updateSummaryNumbers(summary) {
+		const totalCostEl = document.getElementById('totalCost');
+		const avgMonthlyCostEl = document.getElementById('avgMonthlyCost');
+		const avgMonthlyConsumptionEl = document.getElementById('avgMonthlyConsumption');
+		const avgDailyConsumptionEl = document.getElementById('avgDailyConsumption');
+
+		if (!totalCostEl) return;
+
+		totalCostEl.innerHTML = '';
+
+		const costValueSpan = document.createElement('span');
+		costValueSpan.className = 'summary-cost-value';
+		totalCostEl.appendChild(costValueSpan);
+
+		this.animateCounterUp(costValueSpan, summary.totalCost, 0);
+
+		if (summary.estimated) {
+			const badge = document.createElement('span');
+			badge.className = 'ml-2 text-xs text-yellow-400';
+			badge.textContent = '(ước tính)';
+			totalCostEl.appendChild(badge);
+		}
+
+		this.animateCounterUp(avgMonthlyCostEl, summary.avgMonthlyCost, 0);
+		this.animateCounterUp(avgMonthlyConsumptionEl, summary.avgMonthlyConsumption, 2);
+		this.animateCounterUp(avgDailyConsumptionEl, summary.avgDailyConsumption, 2);
+	}
 
     // Counter up animation
     animateCounterUp(element, value, decimals = 0) {

@@ -2,7 +2,7 @@
 
 import base64
 from dataclasses import asdict
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 import json
 import logging
 import os
@@ -965,10 +965,8 @@ class EVNAPI:
         Fetch raw daily data list from EVN SPC.
         from_date, to_date: string DD-MM-YYYY
         """
-        from_date_str = (
-            parser.parse(from_date, dayfirst=True) - timedelta(days=1)
-        ).strftime("%Y%m%d")
-        to_date_str = parser.parse(to_date, dayfirst=True).strftime("%Y%m%d")
+        from_date_str = (parser.parse(from_date, dayfirst=True)).strftime("%Y%m%d")
+        to_date_str = date.today().strftime("%Y%m%d")
 
         headers = {
             "User-Agent": "evnapp/59 CFNetwork/1240.0.4 Darwin/20.6.0",
