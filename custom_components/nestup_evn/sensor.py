@@ -118,6 +118,8 @@ class EVNDevice:
 
         self._data = data
         await self._storage.async_update_from_sensor_data(data)
+        await self._storage.async_sync_monthly_history(self._api)
+        self._storage.start_background_backfill(self._api)
         return self._data
 
     async def _async_update(self):

@@ -36,22 +36,8 @@ class EVNDataStorage:
         self._backfill_task: Optional[asyncio.Task] = None
 
         self.data: Dict = self._load()
-
-        meta = self.data.setdefault("meta", {})
-
-        meta_start = meta.get("history_start_date")
-        if meta_start:
-            self.history_start_date = datetime.strptime(
-                meta_start, "%Y-%m-%d"
-            ).date()
-        else:
-            self.history_start_date = (
-                history_start_date or DEFAULT_HISTORY_START_DATE
-            )
-            meta["history_start_date"] = self.history_start_date.isoformat()
-
-        meta.setdefault("backfill_done", False)
-
+        self.history_start_date = history_start_date or DEFAULT_HISTORY_START_DATE
+        
         self.data.setdefault("daily", [])
         self.data.setdefault("monthly", [])
 
@@ -170,38 +156,46 @@ class EVNDataStorage:
             if m.get("Năm") and m.get("Tháng")
         }
 
-    def get_missing_month_ranges(self) -> List[Tuple[int, int]]:
+    async def async_sync_monthly_history(self, api):
         today = date.today()
         end_year = today.year
         end_month = today.month - 1 or 12
 
-        start_year = self.history_start_date.year
-        start_month = self.history_start_date.month
-
         existing = self._existing_months()
+        y, m = self.history_start_date.year, self.history_start_date.month
 
-        missing = []
-        y, m = start_year, start_month
+        updated = False
 
         while (y, m) <= (end_year, end_month):
             if (y, m) not in existing:
-                missing.append((y, m))
+                bills = await api.fetch_monthly_bills_evnspc(
+                    self.customer_id, m, y, m, y
+                )
 
-            if m == 12:
+                if isinstance(bills, list):
+                    for b in bills:
+                        self.data["monthly"].append({
+                            "Tháng": b.get("iThang"),
+                            "Năm": b.get("iNam"),
+                            "Điện tiêu thụ (KWh)": b.get("dSanLuong"),
+                            "Tiền Điện": b.get("lTongTien"),
+                        })
+                    updated = True
+
+            m = 1 if m == 12 else m + 1
+            if m == 1:
                 y += 1
-                m = 1
-            else:
-                m += 1
 
-        return missing
+        if updated:
+            self.data["monthly"].sort(
+                key=lambda x: (x.get("Năm"), x.get("Tháng"))
+            )
+            self.save()
 
     # ---------------------------------------------------------------------
     # BACKFILL
     # ---------------------------------------------------------------------
     def start_background_backfill(self, api):
-        if self.data.get("meta", {}).get("backfill_done"):
-            return
-
         if self._backfill_task and not self._backfill_task.done():
             return
 
@@ -211,11 +205,11 @@ class EVNDataStorage:
 
     async def _async_run_backfill(self, api):
         async with self._lock:
-            meta = self.data.setdefault("meta", {})
-
             try:
-                # -------- DAILY BACKFILL --------
                 for start, end in self.get_missing_daily_ranges():
+                    if start > end:
+                        continue
+
                     daily_raw = await api.fetch_daily_range_evnspc(
                         self.customer_id,
                         start.strftime("%Y%m%d"),
@@ -223,7 +217,7 @@ class EVNDataStorage:
                     )
 
                     if not isinstance(daily_raw, list):
-                        daily_raw = []
+                        continue
 
                     records = [
                         {
@@ -235,43 +229,60 @@ class EVNDataStorage:
                         if d.get("strTime")
                     ]
 
-                    self.add_daily_records(records)
-                    self.save()
-
-                # -------- MONTHLY BACKFILL --------
-                missing_months = self.get_missing_month_ranges()
-
-                if missing_months:
-                    sy, sm = missing_months[0]
-                    ey, em = missing_months[-1]
-
-                    bills = await api.fetch_monthly_bills_evnspc(
-                        self.customer_id,
-                        sm, sy,
-                        em, ey,
-                    )
-
-                    if isinstance(bills, list):
-                        for b in bills:
-                            self.data["monthly"].append({
-                                "Tháng": b.get("iThang"),
-                                "Năm": b.get("iNam"),
-                                "Điện tiêu thụ (KWh)": b.get("dSanLuong"),
-                                "Tiền Điện": b.get("lTongTien"),
-                            })
-
-                        self.data["monthly"].sort(
-                            key=lambda x: (x.get("Năm"), x.get("Tháng"))
-                        )
+                    if records:
+                        self.add_daily_records(records)
                         self.save()
 
-                if self.data.get("daily") or self.data.get("monthly"):
-                    meta["backfill_done"] = True
-                    self.save()
-
             except Exception:
-                meta["backfill_done"] = False
                 self.save()
+
+    async def async_sync_monthly_history(self, api):
+        """
+        Ensure monthly history is complete from history_start_date
+        to last completed month.
+
+        - First run: backfill all missing months
+        - Later runs: only fetch new month when needed
+        """
+
+        today = date.today()
+        end_year = today.year
+        end_month = today.month - 1 or 12
+
+        existing = self._existing_months()
+
+        y, m = self.history_start_date.year, self.history_start_date.month
+
+        updated = False
+
+        while (y, m) <= (end_year, end_month):
+            if (y, m) not in existing:
+                bills = await api.fetch_monthly_bills_evnspc(
+                    self.customer_id, m, y, m, y
+                )
+
+                if isinstance(bills, list):
+                    for b in bills:
+                        self.data["monthly"].append({
+                            "Tháng": b.get("iThang"),
+                            "Năm": b.get("iNam"),
+                            "Điện tiêu thụ (KWh)": b.get("dSanLuong"),
+                            "Tiền Điện": b.get("lTongTien"),
+                        })
+                    updated = True
+
+            # next month
+            if m == 12:
+                y += 1
+                m = 1
+            else:
+                m += 1
+
+        if updated:
+            self.data["monthly"].sort(
+                key=lambda x: (x.get("Năm"), x.get("Tháng"))
+            )
+            self.save()
 
     # ---------------------------------------------------------------------
     # WEB UI EXPORT
