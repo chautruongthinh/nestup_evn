@@ -3,7 +3,7 @@
 import logging
 from typing import Any
 import os
-import json
+from datetime import datetime
 
 from .data_storage import EVNDataStorage
 
@@ -36,6 +36,7 @@ from .const import (
     CONF_PASSWORD,
     CONF_SUCCESS,
     CONF_USERNAME,
+    CONF_HISTORY_START_DATE,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     ID_ECON_DAILY_NEW,
@@ -43,6 +44,7 @@ from .const import (
     ID_ECOST_DAILY_NEW,
     ID_ECOST_DAILY_OLD,
 )
+
 from .types import EVN_SENSORS, EVNSensorEntityDescription
 
 _LOGGER = logging.getLogger(__name__)
@@ -51,30 +53,21 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ):
-    """Setup the sensor platform."""
-
     entry_config = hass.data[DOMAIN][entry.entry_id]
-
     evn_api = nestup_evn.EVNAPI(hass, True)
     evn_device = EVNDevice(entry_config, evn_api)
-
     await evn_device.async_create_coordinator(hass)
 
-    entities = []
-    entities.extend(
-        [EVNSensor(evn_device, description, hass) for description in EVN_SENSORS]
-    )
-
+    entities = [
+        EVNSensor(evn_device, description, hass)
+        for description in EVN_SENSORS
+    ]
     async_add_entities(entities)
 
 
 class EVNDevice:
-    """EVN Device Instance"""
-
     def __init__(self, dataset, api: nestup_evn.EVNAPI) -> None:
-        """Construct Device wrapper."""
         self._name = f"{CONF_DEVICE_NAME}: {dataset[CONF_CUSTOMER_ID]}"
-        self._coordinator: DataUpdateCoordinator = None
         self.hass = api.hass
         self._username = dataset.get(CONF_USERNAME)
         self._password = dataset.get(CONF_PASSWORD)
@@ -83,22 +76,35 @@ class EVNDevice:
         self._monthly_start = dataset.get(CONF_MONTHLY_START)
         self._api = api
         self._data = {}
-        self._branches_data = None  # Will store the branch data
-        self._storage = EVNDataStorage(self.hass, self._customer_id)  # Data storage
+        self._branches_data = None
+        self._coordinator = None
+
+        history_start_iso = dataset.get(CONF_HISTORY_START_DATE)
+        history_start_date = None
+        if history_start_iso:
+            history_start_date = datetime.strptime(
+                history_start_iso, "%Y-%m-%d"
+            ).date()
+
+        self._storage = EVNDataStorage(
+            self.hass,
+            self._customer_id,
+            history_start_date=history_start_date,
+        )
 
     async def async_load_branches(self):
-        """Load EVN branches data asynchronously"""
         try:
-            file_path = os.path.join(os.path.dirname(nestup_evn.__file__), "evn_branches.json")
+            file_path = os.path.join(
+                os.path.dirname(nestup_evn.__file__),
+                "evn_branches.json",
+            )
             self._branches_data = await self.hass.async_add_executor_job(
                 nestup_evn.read_evn_branches_file, file_path
             )
         except Exception as ex:
-            _LOGGER.error("Error loading branches data: %s", str(ex))
-            
-    async def update(self) -> dict[str, Any]:
-        """Update device data from EVN Endpoints."""
+            _LOGGER.error("Load branch data failed: %s", ex)
 
+    async def update(self) -> dict[str, Any]:
         data = await self._api.request_update(
             self._area_name,
             self._username,
@@ -107,39 +113,23 @@ class EVNDevice:
             self._monthly_start,
         )
 
-        status = data.get("status")
-
-        if status != CONF_SUCCESS:
-            raise UpdateFailed(
-                f"EVN update failed ({self._customer_id}): {status}"
-            )
+        if data.get("status") != CONF_SUCCESS:
+            raise UpdateFailed(f"EVN update failed: {self._customer_id}")
 
         self._data = data
-
-        # Save historical data
         await self._storage.async_update_from_sensor_data(data)
-
-        _LOGGER.info(
-            "[EVN ID %s] Successfully fetched new data from EVN Server.",
-            self._customer_id,
-        )
-
         return self._data
 
     async def _async_update(self):
-        """Fetch the latest data from EVN."""
-        await self.update()
+        return await self.update()
 
     async def async_create_coordinator(self, hass: HomeAssistant) -> None:
-        """Create the coordinator for this specific device."""
         if self._coordinator:
             return
 
         await self.async_load_branches()
-        
-        # Load historical data
         await self._storage.async_load()
-        
+
         coordinator = DataUpdateCoordinator(
             hass,
             _LOGGER,
@@ -147,41 +137,22 @@ class EVNDevice:
             update_method=self._async_update,
             update_interval=DEFAULT_SCAN_INTERVAL,
         )
-        await coordinator.async_config_entry_first_refresh()
         self._coordinator = coordinator
+        await coordinator.async_config_entry_first_refresh()
+        if not self._storage.data.get("meta", {}).get("backfill_done"):
+            self._storage.start_background_backfill(self._api)
 
     @property
-    def info(self) -> DeviceInfo:
-        """Return device description for device registry."""
-        evn_area = nestup_evn.get_evn_info_sync(self._customer_id, self._branches_data)
-        hw_version = f"by {self._area_name['name']}"
-
-        if (evn_area["status"] == CONF_SUCCESS) and (
-            evn_area["evn_branch"] != "Unknown"
-        ):
-            hw_version = f"by {evn_area['evn_branch']}"
-
-        return DeviceInfo(
-            name=self._name,
-            identifiers={(DOMAIN, self._customer_id)},
-            manufacturer=CONF_DEVICE_MANUFACTURER,
-            sw_version=CONF_DEVICE_SW_VERSION,
-            hw_version=hw_version,
-            model=CONF_DEVICE_MODEL,
-        )
-
-    @property
-    def coordinator(self) -> DataUpdateCoordinator or None:
-        """Return coordinator associated."""
+    def coordinator(self):
         return self._coordinator
 
     @property
     def branch_info(self):
-        """Get branch info synchronously."""
         if self._branches_data is None:
             return {"status": CONF_ERR_UNKNOWN}
-        return nestup_evn.get_evn_info_sync(self._customer_id, self._branches_data)
-
+        return nestup_evn.get_evn_info_sync(
+            self._customer_id, self._branches_data
+        )
 
 class EVNSensor(CoordinatorEntity, SensorEntity):
     """EVN Sensor Instance."""
@@ -217,7 +188,7 @@ class EVNSensor(CoordinatorEntity, SensorEntity):
     @property
     def native_value(self):
         """Return the state of the sensor."""
-        data = self.entity_description.value_fn(self._device._data)
+        data = self.entity_description.value_fn(self._device._data) or {}
 
         if self.entity_description.dynamic_name:
             self._attr_name = f"{self._default_name} {data.get('info')}"

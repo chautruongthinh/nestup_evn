@@ -123,27 +123,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                                 data=self._user_data,
                             )
 
-                            history_start_iso = self._user_data.get(
-                                CONF_HISTORY_START_DATE
-                            )
-                            history_start_date = None
-                            if history_start_iso:
-                                history_start_date = datetime.strptime(
-                                    history_start_iso, "%Y-%m-%d"
-                                ).date()
-
-                            storage = EVNDataStorage(
-                                self.hass,
-                                self._user_data[CONF_CUSTOMER_ID],
-                                history_start_date=history_start_date,
-                            )
-
-                            storage.start_background_backfill(
-                                self.hass,
-                                self._api,
-                                self._user_data,
-                            )
-
                             return entry
 
         schema = vol.Schema(

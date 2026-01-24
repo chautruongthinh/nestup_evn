@@ -965,14 +965,14 @@ class EVNAPI:
         Fetch raw daily data list from EVN SPC.
         from_date, to_date: string DD-MM-YYYY
         """
-        from_date_str = (parser.parse(from_date, dayfirst=True)).strftime("%Y%m%d")
-        to_date_str = date.today().strftime("%Y%m%d")
+        from_date_str = parser.parse(from_date, dayfirst=True).strftime("%Y%m%d")
+        to_date_str   = parser.parse(to_date, dayfirst=True).strftime("%Y%m%d")
 
         headers = {
             "User-Agent": "evnapp/59 CFNetwork/1240.0.4 Darwin/20.6.0",
             "Authorization": f"Bearer {self._evn_area.get('access_token')}",
             "Accept": "application/json",
-            "Accept-Encoding": "gzip, deflate, br",
+            "Accept-Encoding": "identity",
             "Accept-Language": "vi-vn",
             "Connection": "keep-alive",
         }
@@ -989,7 +989,10 @@ class EVNAPI:
             api_name="Fetch EVN daily raw data"
         )
 
-        if status != CONF_SUCCESS or not resp_json:
+        if status != CONF_SUCCESS:
+            return []
+
+        if not isinstance(resp_json, list):
             return []
 
         return resp_json
@@ -1030,7 +1033,6 @@ class EVNAPI:
             return []
 
         return resp_json
-
 
 async def json_processing(resp):
     resp_json: dict = {}
