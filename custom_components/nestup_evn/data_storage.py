@@ -5,10 +5,10 @@ from datetime import date, datetime, timedelta
 from typing import Dict, List, Tuple, Optional
 
 from homeassistant.core import HomeAssistant
+from .utils import calc_ecost, parse_evnhanoi_money
 
 DATE_FMT = "%d-%m-%Y"
 DEFAULT_HISTORY_START_DATE = date(2025, 1, 1)
-
 
 def daterange(start: date, end: date):
     d = start
@@ -70,7 +70,7 @@ class EVNDataStorage:
         return
 
     # ------------------------------------------------------------------
-    # DAILY REALTIME UPDATE (mỗi ngày)
+    # DAILY REALTIME UPDATE (từ sensor)
     # ------------------------------------------------------------------
     async def async_update_from_sensor_data(self, data: dict):
         try:
@@ -116,8 +116,7 @@ class EVNDataStorage:
         except Exception:
             return
 
-        existing = self._existing_daily_dates()
-        if d in existing:
+        if d in self._existing_daily_dates():
             return
 
         self.data["daily"].append(record)
@@ -152,7 +151,7 @@ class EVNDataStorage:
         return missing
 
     # ------------------------------------------------------------------
-    # DAILY BACKFILL (chạy nền)
+    # DAILY BACKFILL
     # ------------------------------------------------------------------
     def start_background_backfill(self, api):
         self.hass.async_create_task(
@@ -165,79 +164,422 @@ class EVNDataStorage:
                 if start > end:
                     continue
 
-                daily_raw = await api.fetch_daily_range_evnspc(
-                    self.customer_id,
-                    start.strftime("%Y%m%d"),
-                    end.strftime("%Y%m%d"),
-                )
+                updated = False
 
-                if not isinstance(daily_raw, list):
-                    continue
+                # ===============================
+                # EVN SPC
+                # ===============================
+                if api._evn_area.get("name") == "EVNSPC":
+                    daily_raw = await api.fetch_daily_range_evnspc(
+                        self.customer_id,
+                        start.strftime("%d-%m-%Y"),
+                        end.strftime("%d-%m-%Y"),
+                    )
 
-                for d in daily_raw:
-                    if not d.get("strTime"):
+                    if isinstance(daily_raw, list):
+                        for d in daily_raw:
+                            if not d.get("strTime"):
+                                continue
+                            try:
+                                d_date = datetime.strptime(
+                                    d["strTime"], "%d/%m/%Y"
+                                ).date()
+                            except Exception:
+                                continue
+
+                            if not (start <= d_date <= end):
+                                continue
+
+                            record = {
+                                "Ngày": d["strTime"].replace("/", "-"),
+                                "Điện tiêu thụ (kWh)": float(
+                                    d.get("dSanLuongBT") or 0
+                                ),
+                                "Tiền điện (VND)": None,
+                            }
+                            self._add_daily_record(record)
+                            updated = True
+
+                # ===============================
+                # EVN NPC
+                # ===============================
+                elif api._evn_area.get("name") == "EVNNPC":
+                    daily_raw = await api.fetch_daily_range_evnnpc(
+                        self.customer_id,
+                        start,
+                        end,
+                    )
+
+                    if isinstance(daily_raw, list):
+                        for d in daily_raw:
+                            if not d.get("NGAY"):
+                                continue
+                            try:
+                                d_date = datetime.strptime(
+                                    d["NGAY"], "%d/%m/%Y"
+                                ).date()
+                            except Exception:
+                                continue
+
+                            if not (start <= d_date <= end):
+                                continue
+
+                            record = {
+                                "Ngày": d["NGAY"].replace("/", "-"),
+                                "Điện tiêu thụ (kWh)": float(
+                                    d.get("DIEN_TTHU") or 0
+                                ),
+                                "Tiền điện (VND)": None,
+                            }
+                            self._add_daily_record(record)
+                            updated = True
+
+                # ===============================
+                # EVN CPC
+                # ===============================
+                elif api._evn_area.get("name") == "EVNCPC":
+                    daily_raw = await api.fetch_daily_range_evncpc(self.customer_id)
+
+                    if not isinstance(daily_raw, list):
                         continue
 
-                    record = {
-                        "Ngày": d["strTime"].replace("/", "-"),
-                        "Điện tiêu thụ (kWh)": d.get("dSanLuongBT"),
-                        "Tiền điện (VND)": None,
-                    }
-                    self._add_daily_record(record)
+                    for d in daily_raw:
+                        ngay = d.get("ngay")
+                        kwh = d.get("sanLuongNgay")
 
-                self.save()
+                        if not ngay or kwh is None:
+                            continue
+
+                        record = {
+                            "Ngày": datetime.fromisoformat(
+                                ngay.replace("Z", "")
+                            ).strftime(DATE_FMT),
+                            "Điện tiêu thụ (kWh)": float(kwh),
+                            "Tiền điện (VND)": None,
+                        }
+
+                        self._add_daily_record(record)
+                        updated = True
+
+                # ===============================
+                # EVN HCMC
+                # ===============================
+                elif api._evn_area.get("name") == "EVNHCMC":
+                    daily_raw = await api.fetch_daily_range_evnhcmc(
+                        self.customer_id,
+                        start.strftime("%d/%m/%Y"),
+                        end.strftime("%d/%m/%Y"),
+                    )
+
+                    if isinstance(daily_raw, list):
+                        for d in daily_raw:
+                            ngay = d.get("ngayFull")
+                            kwh = d.get("Tong")
+
+                            if not ngay or kwh is None:
+                                continue
+
+                            record = {
+                                "Ngày": ngay.replace("/", "-"),
+                                "Điện tiêu thụ (kWh)": float(kwh),
+                                "Tiền điện (VND)": None,
+                            }
+
+                            self._add_daily_record(record)
+                            updated = True
+
+                # ===============================
+                # EVN HANOI
+                # ===============================
+                elif api._evn_area.get("name") == "EVNHANOI":
+                    fetch_start = start - timedelta(days=1)
+
+                    raw = await api.fetch_daily_range_evnhanoi(
+                        self.customer_id, fetch_start, end
+                    )
+
+                    if not isinstance(raw, list):
+                        continue
+
+                    parsed = []
+                    for d in raw:
+                        s = d.get("ngayShort") or d.get("ngay")
+                        chi_so = d.get("chiSo")
+                        if not s or chi_so is None:
+                            continue
+                        try:
+                            parsed.append((
+                                datetime.strptime(s, "%d/%m/%Y").date(),
+                                float(chi_so),
+                            ))
+                        except Exception:
+                            continue
+
+                    if len(parsed) < 2:
+                        continue
+
+                    parsed.sort(key=lambda x: x[0])
+
+                    prev_date, prev_index = parsed[0]
+
+                    for cur_date, cur_index in parsed[1:]:
+                        kwh = max(0.0, cur_index - prev_index)
+
+                        if prev_date and start <= prev_date <= end:
+                            record = {
+                                "Ngày": prev_date.strftime(DATE_FMT),
+                                "Điện tiêu thụ (kWh)": round(kwh, 3),
+                                "Tiền điện (VND)": None,
+                            }
+                            self._add_daily_record(record)
+                            updated = True
+                        prev_date, prev_index = cur_date, cur_index
+
+                if updated:
+                    self.save()
 
     # ------------------------------------------------------------------
-    # MONTHLY SYNC (FULL + INCREMENTAL)
+    # MONTHLY HELPERS
     # ------------------------------------------------------------------
-    def _existing_months(self) -> set:
-        return {
-            (m.get("Năm"), m.get("Tháng"))
-            for m in self.data.get("monthly", [])
-            if m.get("Năm") and m.get("Tháng")
-        }
+    def _monthly_record_key(
+        self,
+        record: dict | None = None,
+        *,
+        invoice_id: str | None = None,
+        year: int | None = None,
+        month: int | None = None,
+    ) -> tuple | None:
+        """
+        Unified monthly key for SPC & NPC.
+        - NPC: use invoice_id (NOT stored in JSON)
+        - SPC: use (year, month)
+        """
 
+        if invoice_id:
+            return ("NPC", invoice_id)
+
+        if year and month:
+            return ("MONTH", year, month)
+
+        if record:
+            y = record.get("Năm")
+            m = record.get("Tháng")
+            if y and m:
+                return ("MONTH", y, m)
+
+        return None
+
+
+    def _existing_monthly_keys(self) -> set:
+        keys = set()
+        for r in self.data.get("monthly", []):
+            k = self._monthly_record_key(record=r)
+            if k:
+                keys.add(k)
+        return keys
+
+    # ------------------------------------------------------------------
+    # MONTHLY SYNC
+    # ------------------------------------------------------------------
     async def async_sync_monthly_history(self, api):
-        """
-        - First run: backfill ALL missing months
-        - Later runs: only fetch new month when month changes
-        """
-
-        today = date.today()
-        end_year = today.year
-        end_month = today.month - 1 or 12
-
-        existing = self._existing_months()
+        existing_keys = self._existing_monthly_keys()
         updated = False
 
-        y, m = (
-            self.history_start_date.year,
-            self.history_start_date.month,
-        )
+        # ===============================
+        # EVN SPC
+        # ===============================
+        if api._evn_area.get("name") == "EVNSPC":
+            today = date.today()
+            end_year = today.year
+            end_month = today.month - 1 or 12
 
-        while (y, m) <= (end_year, end_month):
-            if (y, m) not in existing:
-                bills = await api.fetch_monthly_bills_evnspc(
-                    self.customer_id, m, y, m, y
+            y, m = (
+                self.history_start_date.year,
+                self.history_start_date.month,
+            )
+
+            while (y, m) <= (end_year, end_month):
+                record = {
+                    "Tháng": m,
+                    "Năm": y,
+                }
+                key = self._monthly_record_key(record)
+
+                if key not in existing_keys:
+                    bills = await api.fetch_monthly_bills_evnspc(
+                        self.customer_id, m, y, m, y
+                    )
+
+                    if isinstance(bills, list):
+                        for b in bills:
+                            record = {
+                                "Tháng": b.get("iThang"),
+                                "Năm": b.get("iNam"),
+                                "Điện tiêu thụ (KWh)": b.get("dSanLuong"),
+                                "Tiền Điện": b.get("lTongTien"),
+                            }
+                            k = self._monthly_record_key(record)
+                            if k and k not in existing_keys:
+                                self.data["monthly"].append(record)
+                                existing_keys.add(k)
+                                updated = True
+
+                if m == 12:
+                    y += 1
+                    m = 1
+                else:
+                    m += 1
+
+        # ===============================
+        # EVN NPC
+        # ===============================        
+        elif api._evn_area.get("name") == "EVNNPC":
+            bills = await api.fetch_monthly_bills_evnnpc(
+                self.customer_id,
+                self.history_start_date.month,
+                self.history_start_date.year,
+                date.today().month,
+                date.today().year,
+            )
+
+            if not isinstance(bills, list):
+                return
+
+            bills.sort(key=lambda x: (x.get("NAM", 0), x.get("THANG", 0)))
+
+            existing_keys = self._existing_monthly_keys()
+
+            for b in bills:
+                year = b.get("NAM")
+                month = b.get("THANG")
+                kwh = b.get("DIEN_TTHU")
+
+                if not year or not month or kwh is None:
+                    continue
+
+                key = self._monthly_record_key(
+                    year=year,
+                    month=month,
                 )
 
-                if isinstance(bills, list):
-                    for b in bills:
-                        self.data["monthly"].append({
-                            "Tháng": b.get("iThang"),
-                            "Năm": b.get("iNam"),
-                            "Điện tiêu thụ (KWh)": b.get("dSanLuong"),
-                            "Tiền Điện": b.get("lTongTien"),
-                        })
-                    updated = True
+                if key in existing_keys:
+                    continue
 
-            # next month
-            if m == 12:
-                y += 1
-                m = 1
-            else:
-                m += 1
+                record = {
+                    "Tháng": month,
+                    "Năm": year,
+                    "Điện tiêu thụ (KWh)": float(kwh),
+                    "Tiền Điện": calc_ecost(float(kwh)),
+                }
 
+                self.data["monthly"].append(record)
+                existing_keys.add(key)
+                updated = True
+
+        # ===============================
+        # EVN CPC
+        # ===============================
+        elif api._evn_area.get("name") == "EVNCPC":
+            bills = await api.fetch_monthly_bills_evncpc(self.customer_id)
+
+            if not isinstance(bills, list):
+                return
+
+            existing_keys = self._existing_monthly_keys()
+
+            for b in bills:
+                year = b.get("NAM_HT")
+                month = b.get("THANG_HT")
+                kwh = b.get("DIEN_TTHU_HT")
+                cost = b.get("TONG_TIEN_HT")
+
+                if not year or not month or kwh is None:
+                    continue
+
+                key = self._monthly_record_key(year=year, month=month)
+                if key in existing_keys:
+                    continue
+
+                record = {
+                    "Tháng": month,
+                    "Năm": year,
+                    "Điện tiêu thụ (KWh)": float(kwh),
+                    "Tiền Điện": int(cost) if cost is not None else None,
+                }
+
+                self.data["monthly"].append(record)
+                existing_keys.add(key)
+                updated = True
+
+        # ===============================
+        # EVN HCMC
+        # ===============================
+        elif api._evn_area.get("name") == "EVNHCMC":
+            bills = await api.fetch_monthly_bills_evnhcmc(self.customer_id)
+
+            if not isinstance(bills, list):
+                return
+
+            existing_keys = self._existing_monthly_keys()
+
+            for b in bills:
+                year = int(b.get("NAM"))
+                month = int(b.get("THANG"))
+                kwh = float(b.get("SAN_LUONG", 0))
+                cost = float(b.get("TONG_TIEN", 0))
+
+                key = self._monthly_record_key(year=year, month=month)
+                if key in existing_keys:
+                    continue
+
+                record = {
+                    "Tháng": month,
+                    "Năm": year,
+                    "Điện tiêu thụ (KWh)": kwh,
+                    "Tiền Điện": int(cost),
+                }
+
+                self.data["monthly"].append(record)
+                existing_keys.add(key)
+                updated = True
+
+        # ===============================
+        # EVN HANOI
+        # ===============================
+        elif api._evn_area.get("name") == "EVNHANOI":
+
+            bills = await api.fetch_monthly_bills_evnhanoi(self.customer_id)
+            if not isinstance(bills, list):
+                return
+
+            existing_keys = self._existing_monthly_keys()
+            updated = False
+
+            for b in bills:
+                try:
+                    year = int(b.get("nam"))
+                    month = int(b.get("thang"))
+                    kwh = float(b.get("dienTthu"))
+                except Exception:
+                    continue
+
+                cost = parse_evnhanoi_money(b.get("soTien"))
+
+                key = self._monthly_record_key(year=year, month=month)
+                if key in existing_keys:
+                    continue
+
+                record = {
+                    "Tháng": month,
+                    "Năm": year,
+                    "Điện tiêu thụ (KWh)": kwh,
+                    "Tiền Điện": cost,
+                }
+
+                self.data["monthly"].append(record)
+                existing_keys.add(key)
+                updated = True
+       
         if updated:
             self.data["monthly"].sort(
                 key=lambda x: (x.get("Năm"), x.get("Tháng"))
