@@ -226,7 +226,6 @@ class EVNAPI:
         _LOGGER.info("EVNHCMC login OK, session=%s", evn_cookie.value)
         return CONF_SUCCESS
 
-
     async def login_evnnpc(self, username, password, customer_id) -> str:
         payload = {
             "username": username,
@@ -569,7 +568,6 @@ class EVNAPI:
 
         return result.get("chiSoNgayFull", [])
 
-
     async def fetch_monthly_bills_evnhanoi(
         self,
         customer_id: str,
@@ -600,8 +598,6 @@ class EVNAPI:
             return []
 
         return data.get("data", {}).get("dmLichSuThanhToanList", [])
-
-
 
     ##########################
     #       EVN HCMC          #
@@ -1118,24 +1114,64 @@ class EVNAPI:
         return resp_json
 
     async def fetch_monthly_bills_evncpc(self, customer_id: str):
-        headers = {
-            "Authorization": f"Bearer {self._evn_area.get('access_token')}",
-            "accept": "application/json",
+
+        url = "https://cskh-api.cpc.vn/api/remote/thongTinHoaDonSpider"
+        params = {
+            "customerCode": customer_id,
+            "maDonViQuanLy": customer_id[:6],
         }
 
-        resp = await self._session.get(
-            "https://cskh-api.cpc.vn/api/remote/lichSuDienNangTieuThu",
-            params={
-                "customerCode": customer_id,
-            },
-            headers=headers,
-        )
+        headers = {
+            "Accept": "application/json",
+            "Authorization": f"Bearer {self._evn_area.get('access_token')}",
+            "Origin": "https://cskh.cpc.vn",
+            "Referer": "https://cskh.cpc.vn/",
+            "User-Agent": "Mozilla/5.0",
+            "Accept-Encoding": "gzip, deflate, br",
+        }
 
-        status, resp_json = await json_processing(resp)
-        if status != CONF_SUCCESS:
+        resp = await self._session.get(url, params=params, headers=headers)
+
+        # ---- HTTP status check ----
+        if resp.status != 200:
+            _LOGGER.error(
+                "EVN CPC HTTP error %s while fetching monthly bills",
+                resp.status,
+            )
             return []
 
-        return resp_json.get("result", [])
+        # ---- read raw text first (CPC hay trả HTML khi token lỗi) ----
+        try:
+            raw_text = await resp.text()
+        except Exception as e:
+            _LOGGER.error("EVN CPC read response error: %s", e)
+            return []
+
+        # ---- parse JSON ----
+        try:
+            payload = json.loads(raw_text)
+        except Exception:
+            _LOGGER.error(
+                "EVN CPC response is not JSON, first 500 chars:\n%s",
+                raw_text[:500],
+            )
+            return []
+
+        bills = payload.get("result")
+        if not isinstance(bills, list):
+            _LOGGER.error(
+                "EVN CPC unexpected response format: %s",
+                payload,
+            )
+            return []
+
+        _LOGGER.info(
+            "EVN CPC fetched %d monthly bills (raw)",
+            len(bills),
+        )
+
+        return bills
+
 
     async def request_update_evnspc(
         self, customer_id, from_date, to_date, last_index="001"

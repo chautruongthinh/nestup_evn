@@ -480,21 +480,34 @@ class EVNDataStorage:
         # EVN CPC
         # ===============================
         elif api._evn_area.get("name") == "EVNCPC":
-            bills = await api.fetch_monthly_bills_evncpc(self.customer_id)
 
+            bills = await api.fetch_monthly_bills_evncpc(self.customer_id)
             if not isinstance(bills, list):
                 return
 
             existing_keys = self._existing_monthly_keys()
+            updated = False
+
+            start_date = self.history_start_date
 
             for b in bills:
-                year = b.get("NAM_HT")
-                month = b.get("THANG_HT")
-                kwh = b.get("DIEN_TTHU_HT")
-                cost = b.get("TONG_TIEN_HT")
-
-                if not year or not month or kwh is None:
+                try:
+                    year = int(b.get("NAM"))
+                    month = int(b.get("THANG"))
+                    kwh = float(b.get("DIEN_TTHU") or b.get("SAN_LUONG") or 0)
+                    cost = int(b.get("TONG_TIEN")) if b.get("TONG_TIEN") is not None else None
+                except Exception:
                     continue
+
+                try:
+                    dky = b.get("NGAY_DKY")
+                    if dky:
+                        bill_date = datetime.fromisoformat(dky.replace("Z", "")).date()
+                        if bill_date < start_date:
+                            continue
+                except Exception:
+                    if (year, month) < (start_date.year, start_date.month):
+                        continue
 
                 key = self._monthly_record_key(year=year, month=month)
                 if key in existing_keys:
@@ -503,13 +516,20 @@ class EVNDataStorage:
                 record = {
                     "Tháng": month,
                     "Năm": year,
-                    "Điện tiêu thụ (KWh)": float(kwh),
-                    "Tiền Điện": int(cost) if cost is not None else None,
+                    "Điện tiêu thụ (KWh)": kwh,
+                    "Tiền Điện": cost,
                 }
 
                 self.data["monthly"].append(record)
                 existing_keys.add(key)
                 updated = True
+
+            if updated:
+                self.data["monthly"].sort(
+                    key=lambda x: (x.get("Năm"), x.get("Tháng"))
+                )
+                self.save()
+
 
         # ===============================
         # EVN HCMC
