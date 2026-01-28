@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thống Kê Điện 2025</title>
+    
+    <!-- External Libraries -->
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="assets/css/main.css">
+    <link rel="stylesheet" href="assets/css/animations.css">
+    <link rel="stylesheet" href="assets/css/components.css">
+</head>
+<body>
+    <!-- Animated SVG Background -->
+    <svg id="svg-bg" width="100%" height="100%" viewBox="0 0 1920 1080" preserveAspectRatio="none">
+        <defs>
+            <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#e961ab"/>
+                <stop offset="100%" stop-color="#6b46c1"/>
+            </linearGradient>
+            <linearGradient id="grad2" x1="0%" y1="100%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#2ecc40"/>
+                <stop offset="100%" stop-color="#3498db"/>
+            </linearGradient>
+        </defs>
+        <circle id="bg-c1" cx="400" cy="300" r="180" fill="url(#grad1)"/>
+        <circle id="bg-c2" cx="1600" cy="800" r="220" fill="url(#grad2)"/>
+        <ellipse id="bg-e1" cx="1200" cy="200" rx="120" ry="60" fill="#fff" opacity="0.12"/>
+    </svg>
+
+    <div class="content">        <!-- Header -->
+        <div class="flex flex-col md:flex-row justify-between items-center mb-2">
+            <div class="flex items-center mb-2 md:mb-0">
+                <div class="account-avatar" id="accountAvatar">
+                    <i class="fas fa-user"></i>
+                </div>
+                <h1 class="text-xl md:text-xl font-bold">Black Smarthome!</h1>
+            </div>            <div class="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-3 w-full md:w-auto">
+                <select id="accountSelect" class="p-2 rounded-lg bg-gray-800 text-white w-full md:w-auto text-sm">
+                    <!-- Options will be populated by JavaScript -->
+                </select>
+                <select id="monthSelect" class="p-2 rounded-lg bg-gray-800 text-white w-full md:w-auto text-sm">
+                    <!-- Options will be populated by JavaScript -->
+                </select>                <div class="header-buttons-container flex flex-row w-full md:w-auto gap-2">
+                    <div class="flex-1 md:flex-none">
+                        <select id="themeSelect" class="p-2 rounded-lg bg-gray-800 text-white w-full md:w-auto text-sm theme-selector h-8 md:h-auto min-h-[32px]">
+                            <option value="dark-gradient">🌙 Dark Gradient</option>
+                            <option value="cyberpunk">⚡ Cyberpunk 2025</option>
+                            <option value="neon-dreams">🌈 Neon Dreams</option>
+                            <option value="aurora-borealis">✨ Aurora Borealis</option>
+                            <option value="synthwave">🌆 Synthwave</option>
+                            <option value="glassmorphism">🔮 Glassmorphism</option>
+                            <option value="neubrutalism">🔥 Neubrutalism</option>
+                            <option value="matrix-rain">💚 Matrix Rain</option>
+                            <option value="sunset-vibes">🌅 Sunset Vibes</option>
+                            <option value="ocean-depth">🌊 Ocean Depth</option>
+                            <option value="midnight-purple">💜 Midnight Purple</option>
+                            <option value="golden-hour">🌟 Golden Hour</option>
+                            <option value="forest-mist">🌲 Forest Mist</option>
+                            <option value="cosmic-dust">🪐 Cosmic Dust</option>
+                            <option value="tokyo-night">🗾 Tokyo Night</option>
+                            <option value="minimal-light">☀️ Minimal Light</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>        <!-- Main Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">            <!-- Summary Card -->
+            <div class="card p-2 col-span-1">                <!-- Header with title -->
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-base font-semibold">Tổng Quan</h3>
+                </div>
+                  <!-- Main Summary Stats -->
+                <div class="space-y-1 mb-3">                    <div class="flex items-center gap-2 text-sm">
+                        <i class="fas fa-coins text-yellow-400"></i>
+                        <span class="summary-label">Tổng tiền:</span>
+                        <span id="totalCost" class="summary-value">0</span>
+                        <span class="summary-unit">VND</span>
+                    </div>                    <div class="flex items-center gap-2 text-sm">
+                        <i class="fas fa-calendar-alt text-purple-400"></i>
+                        <span class="summary-label">Trung bình/tháng:</span>
+                        <span id="avgMonthlyCost" class="summary-value">0</span>
+                        <span class="summary-unit">VND</span>
+                    </div>                    <div class="flex items-center gap-2 text-sm">
+                        <i class="fas fa-bolt text-blue-400"></i>
+                        <span class="summary-label">Tiêu thụ/tháng:</span>
+                        <span id="avgMonthlyConsumption" class="summary-value">0</span>
+                        <span class="summary-unit">kWh</span>
+                    </div>                    <div class="flex items-center gap-2 text-sm">
+                        <i class="fas fa-bolt text-green-400"></i>
+                        <span class="summary-label">Tiêu thụ/ngày:</span>
+                        <span id="avgDailyConsumption" class="summary-value">0</span>
+                        <span class="summary-unit">kWh</span>
+                    </div></div>
+                
+                
+                <!-- Recent Months Summary - Inside same card -->
+                <div class="grid grid-cols-2 gap-1" id="summaryContainer">
+                    <!-- Summary cards will be populated by JavaScript -->
+                </div>
+            </div><!-- Monthly Chart Card -->
+            <div class="card p-3 col-span-1 md:col-span-2">
+                <h3 class="text-base font-semibold mb-2">Tiêu Thụ Hàng Tháng</h3>                <div class="flex items-center justify-between mb-2 gap-2">
+                    <div class="filter-segment flex-shrink-0">
+                        <button class="btn filter-btn text-xs px-2 py-1" data-range="7">7 ngày</button>
+                        <button class="btn filter-btn text-xs px-2 py-1" data-range="30">30 ngày</button>
+                        <button class="btn filter-btn text-xs px-2 py-1" data-range="90">90 ngày</button>
+                    </div>
+                    <div class="flex-shrink-0">
+                        <button id="toggleDetailTable" class="btn text-xs px-2 py-1">Hiện bảng chi tiết</button>
+                    </div>
+                </div>                <div class="chart-container monthly-chart">
+                    <canvas id="monthlyChart"></canvas>
+                </div>
+            </div>            <!-- Search Card -->
+            <div class="card search-card p-3 col-span-1">
+                <h3 class="text-base font-semibold mb-2">Tìm Theo Ngày</h3>
+                <div class="date-search-container">
+                    <div class="date-inputs flex gap-2">
+                        <input type="date" id="startDate" class="w-full p-2 rounded-lg bg-gray-800 text-white text-sm">
+                        <input type="date" id="endDate" class="w-full p-2 rounded-lg bg-gray-800 text-white text-sm">
+                    </div>
+                    <button id="searchBtn" class="btn w-full text-white py-2 rounded-lg text-sm mt-2">
+                        <i class="fas fa-search mr-1"></i>Tìm kiếm
+                    </button>
+                </div>
+                <!-- Recent Days Data Display -->
+                <div class="recent-days-container mt-3 pt-3 border-t border-gray-700">
+                    <h4 class="text-sm font-medium mb-2">5 Ngày Gần Đây</h4>
+                    <div id="recentDaysData" class="recent-days-list">
+                        <!-- Dữ liệu sẽ được load bởi JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Daily Chart Card -->
+            <div class="card p-3 col-span-1 md:col-span-2">
+                <h3 class="text-base font-semibold mb-2">Tiêu Thụ Hàng Ngày</h3>
+                <div class="chart-container daily-chart">
+                    <canvas id="dailyChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div class="loader" id="mainLoader"></div>
+
+    <!-- Responsive Data Summary Bar (mobile only) -->
+    <div id="summaryBar" class="fixed bottom-0 left-0 w-full bg-gray-900 bg-opacity-90 text-white flex justify-around items-center py-2 z-30 md:hidden" style="display:none;">
+        <div class="flex flex-col items-center">
+            <span class="text-xs">Tổng tiền</span>
+            <span id="barTotalCost" class="font-bold"></span>
+        </div>
+        <div class="flex flex-col items-center">
+            <span class="text-xs">TB/Tháng</span>
+            <span id="barAvgMonthlyCost" class="font-bold"></span>
+        </div>
+        <div class="flex flex-col items-center">
+            <span class="text-xs">TB/Ngày</span>
+            <span id="barAvgDailyConsumption" class="font-bold"></span>
+        </div>
+    </div>    <!-- Detail Table Modal -->
+    <div id="detailModal" class="modal-overlay">
+        <div class="modal-content">            <div class="modal-header">
+                <h3 class="modal-title">Chi Tiết Tiêu Thụ Điện</h3>
+                <button id="modalCloseBtn" class="modal-close">&times;</button>
+            </div>
+            
+            <!-- Statistics Summary (Fixed) -->
+            <div id="tableStats" class="bg-gray-800 p-3 rounded-lg mb-3 text-sm">
+                <!-- Statistics will be populated by JavaScript -->
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table id="detailTable" class="modal-table">
+                    <thead>
+                        <tr>
+                            <th>Ngày</th>
+                            <th>Tiêu thụ (kWh)</th>
+                            <th>Tiền điện (VND)</th>
+                            <th>Đơn giá (VND/kWh)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Table rows will be populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Config Modal (Simple, static, no overlay, no billing-cycle-modal class) -->
+    <div id="configModal" class="hidden" style="position:fixed;z-index:1000;top:50px;left:50%;transform:translateX(-50%);background:#222;color:#fff;border-radius:12px;box-shadow:0 4px 32px #0008;width:95vw;max-width:420px;padding:0;">
+      <div style="padding:0 1.5rem 1.5rem 1.5rem;">
+        <div class="flex items-center justify-between py-3 border-b border-gray-700">
+          <h3 class="text-lg font-semibold"><i class="fas fa-sliders-h"></i> Cấu hình tài khoản</h3>
+          <button id="closeConfigModal" type="button" style="font-size:2rem;line-height:1;color:#fff;background:none;border:none;outline:none;cursor:pointer;">&times;</button>
+        </div>
+        <div class="modal-body pt-3">
+          <form id="configForm">
+            <div class="mb-4">
+              <label class="block font-bold mb-1">Gemini API Key</label>
+              <input type="password" id="gemini_api_key" required class="w-full p-2 border rounded focus:outline-none focus:ring focus:border-blue-400 bg-gray-900 text-white">
+            </div>
+            <div class="mb-4">
+              <label class="block font-bold mb-1">Gemini Model</label>
+              <input type="text" id="gemini_model" required value="gemini-2.0-flash" class="w-full p-2 border rounded focus:outline-none focus:ring focus:border-blue-400 bg-gray-900 text-white">
+            </div>
+            <div class="accounts mb-4">
+      <label class="block font-bold mb-1">Danh sách tài khoản</label>
+      <div id="accountsList"></div>
+      <button type="button" class="add-btn mt-2" id="addAccountBtn">+ Thêm tài khoản</button>
+    </div>
+            <div class="flex gap-2 mt-4 justify-end">
+              <button type="submit" class="btn btn-primary save-btn">Lưu cấu hình</button>
+              <button type="button" class="btn btn-secondary save-btn" id="saveAndRestartBtn" style="background:#e67e22;">Khởi động lại</button>
+            </div>
+            <div class="msg mt-3" id="msg"></div>
+            <div class="mt-6">
+              <h4 class="text-base font-semibold mb-2">Logs</h4>
+              <pre id="logs" class="bg-gray-900 text-gray-100 p-3 rounded max-h-60 overflow-auto text-sm"></pre>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    <!-- JavaScript Modules -->
+    <script src="assets/js/data.js"></script>
+    <script src="assets/js/charts.js"></script>
+    <script src="assets/js/ui.js"></script>
+    <script src="assets/js/main.js"></script>
+    <!-- Đảm bảo KHÔNG có bất kỳ lệnh nào như showConfigModal() hoặc document.getElementById('configModal').classList.remove('hidden') chạy khi load trang. -->
+</body>
+</html>

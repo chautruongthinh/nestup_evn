@@ -101,9 +101,9 @@ VIETNAM_EVN_AREA = [
     Area(
         name=EVN_NAME.NPC,
         location="Khu vực miền Bắc",
-        evn_login_url="https://billnpccc.enterhub.asia/login",
-        evn_data_url="https://billnpccc.enterhub.asia/dailyconsump",
-        evn_payment_url="https://billnpccc.enterhub.asia/mobileapi/home/",
+        evn_login_url="https://cskh.evn.com.vn/cskh/v1/auth/login",
+        evn_data_url="https://apicskhevn.npc.com.vn/api/evn/tracuu/chisongay",
+        evn_payment_url="https://apicskhevn.npc.com.vn/api/evn/tracuu/hoadon",
         pattern=["PA", "PH", "PM", "PN"],
     ),
     Area(
@@ -111,7 +111,7 @@ VIETNAM_EVN_AREA = [
         location="Khu vực miền Trung",
         evn_login_url="https://cskh-api.cpc.vn/connect/token",
         evn_data_url="https://cskh-api.cpc.vn/api/cskh/power-consumption-alerts/by-customer-code/",
-        evn_payment_url="https://appcskh.cpc.vn:4433/api/v4/customer/home/",
+        evn_payment_url="https://cskh-api.cpc.vn/api/remote/app/home/",
         date_needed=False,
         pattern=["PQ", "PC", "PP"],
     ),
@@ -119,7 +119,7 @@ VIETNAM_EVN_AREA = [
         name=EVN_NAME.SPC,
         location="Khu vực miền Nam",
         evn_login_url="https://api.cskh.evnspc.vn/api/user/authenticate",
-        evn_data_url="https://api.cskh.evnspc.vn/api/NghiepVu/LayThongTinSanLuongTheoNgay_v1",
+        evn_data_url="https://api.cskh.evnspc.vn/api/NghiepVu/LayThongTinSanLuongTheoNgay_v2",
         evn_payment_url="https://api.cskh.evnspc.vn/api/NghiepVu/TraCuuNoHoaDon",
         evn_loadshedding_url="https://api.cskh.evnspc.vn/api/NghiepVu/TraCuuLichNgungGiamCungCapDien",
         pattern=["PB", "PK"],
@@ -130,7 +130,7 @@ EVN_SENSORS: tuple[EVNSensorEntityDescription, ...] = (
     # Current day
     EVNSensorEntityDescription(
         key=ID_ECON_DAILY_NEW,
-        name="Sản lượng",
+        name="Sản lượng hôm qua",
         icon="mdi:flash-outline",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
@@ -139,7 +139,7 @@ EVN_SENSORS: tuple[EVNSensorEntityDescription, ...] = (
     ),
     EVNSensorEntityDescription(
         key=ID_ECOST_DAILY_NEW,
-        name="Tiền điện",
+        name="Tiền điện hôm qua",
         icon="mdi:cash-multiple",
         native_unit_of_measurement="VNĐ",
         value_fn=lambda data: data[ID_ECOST_DAILY_NEW],
@@ -148,7 +148,7 @@ EVN_SENSORS: tuple[EVNSensorEntityDescription, ...] = (
     # Previous day
     EVNSensorEntityDescription(
         key=ID_ECON_DAILY_OLD,
-        name="Sản lượng",
+        name="Sản lượng hôm kia",
         icon="mdi:flash-outline",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
@@ -157,7 +157,7 @@ EVN_SENSORS: tuple[EVNSensorEntityDescription, ...] = (
     ),
     EVNSensorEntityDescription(
         key=ID_ECOST_DAILY_OLD,
-        name="Tiền điện",
+        name="Tiền điện hôm kia",
         icon="mdi:cash-multiple",
         native_unit_of_measurement="VNĐ",
         value_fn=lambda data: data[ID_ECOST_DAILY_OLD],

@@ -1,17 +1,17 @@
 {
     "codeowners": [
-        "@trvqhuy"
+        "@chautruongthinh"
     ],
     "config_flow": true,
     "dependencies": [],
-    "documentation": "https://github.com/trvqhuy/nestup_evn/",
+    "documentation": "https://github.com/chautruongthinh/nestup_evn/",
     "domain": "nestup_evn",
     "iot_class": "cloud_polling",
-    "issue_tracker": "https://github.com/trvqhuy/nestup_evn/issues",
+    "issue_tracker": "https://github.com/chautruongthinh/nestup_evn/issues",
     "name": "EVN Data Fetcher",
     "requirements": [
         "python_dateutil",
         "voluptuous"
     ],
-    "version": "2.4.2"
+    "version": "3.1.0"
 }

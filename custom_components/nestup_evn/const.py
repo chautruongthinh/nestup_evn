@@ -8,8 +8,8 @@ DOMAIN = "nestup_evn"
 
 CONF_DEVICE_NAME = "EVN Monitor"
 CONF_DEVICE_MODEL = "Vietnam EVN Monitor"
-CONF_DEVICE_MANUFACTURER = "Huy V. Trinh"
-CONF_DEVICE_SW_VERSION = "2.4.2"
+CONF_DEVICE_MANUFACTURER = "ChauTruongThinh"
+CONF_DEVICE_SW_VERSION = "3.1.0"
 
 CONF_USERNAME = "username"
 CONF_PASSWORD = "password"
@@ -26,6 +26,7 @@ CONF_ERR_UNKNOWN = "unknown"
 CONF_ERR_NOT_SUPPORTED = "not_supported"
 CONF_ERR_NO_MONITOR = "no_monitor"
 CONF_ERR_INVALID_ID = "error_ma_kh_deny"
+CONF_HISTORY_START_DATE = "history_start_date"
 
 ID_ECON_TOTAL_NEW = "econ_total_new"
 ID_ECON_TOTAL_OLD = "econ_total_old"
@@ -41,6 +42,7 @@ ID_LOADSHEDDING = "loadshedding"
 ID_FROM_DATE = "from_date"
 ID_TO_DATE = "to_date"
 ID_LATEST_UPDATE = "latest_update"
+
 
 STATUS_N_PAYMENT_NEEDED = "Đã thanh toán"
 STATUS_PAYMENT_NEEDED = "Chưa thanh toán"
