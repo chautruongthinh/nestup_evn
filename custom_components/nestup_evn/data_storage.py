@@ -350,8 +350,8 @@ class EVNDataStorage:
         except Exception:
             return True
 
-        return (datetime.now() - last_dt).total_seconds() >= interval_seconds
-    
+        return (dt_util.utcnow() - last_dt).total_seconds() >= interval_seconds
+
     async def async_sync_monthly_history(self, api, area, username, password):
         instance = api.get_region_instance(area, self.customer_id)
         if not instance: return

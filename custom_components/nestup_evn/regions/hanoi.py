@@ -1,20 +1,15 @@
 import logging
-import json
 import time
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from dateutil import parser
-from homeassistant.exceptions import ConfigEntryNotReady
+
+from homeassistant.util import dt as dt_util
+
 from ..const import (
     CONF_SUCCESS,
     CONF_ERR_INVALID_AUTH,
     CONF_ERR_INVALID_ID,
-    ID_ECON_DAILY_NEW,
-    ID_ECON_DAILY_OLD,
-    ID_ECON_MONTHLY_NEW,
-    ID_ECON_TOTAL_NEW,
-    ID_ECON_TOTAL_OLD,
-    ID_PAYMENT_NEEDED,
-    ID_M_PAYMENT_NEEDED,
+    CONF_ERR_NO_MONITOR,
     STATUS_PAYMENT_NEEDED,
     STATUS_N_PAYMENT_NEEDED,
 )
@@ -24,82 +19,197 @@ from ..types import EVNUpdateResponse, DailyHistoryRecord, MonthlyBillRecord
 
 _LOGGER = logging.getLogger(__name__)
 
+LOGIN_TTL = timedelta(minutes=10)
+
+
 class HanoiRegion(EVNRegion):
     def __init__(self, hass, session, evn_area):
         super().__init__(hass, session, evn_area)
         self._evnhanoi_contract = None
+        self._logged_in = False
+        self._last_login = None
 
-    def is_token_expired(self) -> bool:
-        expiry_time = self._evn_area.get("token_expiry", 0)
-        return time.time() > expiry_time
+    # ------------------------------------------------------------------
+    # Auth helpers
+    # ------------------------------------------------------------------
+    def _need_login(self) -> bool:
+        if not self._logged_in or not self._last_login:
+            return True
+        if (dt_util.utcnow() - self._last_login) > LOGIN_TTL:
+            return True
+        expiry = self._evn_area.get("token_expiry")
+        return bool(expiry and time.time() > expiry)
 
     async def login(self, username, password, customer_id) -> str:
-        headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
-        payload = {"username": username, "password": password, "client_id": "httplocalhost4500", "client_secret": "secret", "grant_type": "password"}
-        status, resp_json = await self._request("POST", self._evn_area.get("evn_login_url"), data=payload, headers=headers, api_name="Hanoi Login")
-        if status != CONF_SUCCESS: return status
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "application/json",
+        }
+        payload = {
+            "username": username,
+            "password": password,
+            "client_id": "httplocalhost4500",
+            "client_secret": "secret",
+            "grant_type": "password",
+        }
 
-        if ("error" in resp_json) and (resp_json["error"] == "invalid_grant"):
+        status, resp_json = await self._request(
+            "POST",
+            self._evn_area.get("evn_login_url"),
+            data=payload,
+            headers=headers,
+            api_name="Hanoi Login",
+        )
+
+        if status != CONF_SUCCESS:
+            self._logged_in = False
+            return status
+
+        if resp_json.get("error") == "invalid_grant":
+            self._logged_in = False
             return CONF_ERR_INVALID_AUTH
-        elif "access_token" in resp_json:
-            self._evn_area["access_token"] = resp_json["access_token"]
-            if "expires_in" in resp_json:
-                self._evn_area["token_expiry"] = time.time() + resp_json["expires_in"]
-            return CONF_SUCCESS
-        return status
 
-    async def request_update(self, username, password, customer_id, from_date, to_date) -> EVNUpdateResponse:
-        return await self.request_update_evnhanoi(username, password, customer_id, from_date, to_date)
+        token = resp_json.get("access_token")
+        if not token:
+            self._logged_in = False
+            return CONF_ERR_INVALID_AUTH
 
-    async def request_update_evnhanoi(self, username, password, customer_id, from_date, to_date, last_index="001") -> EVNUpdateResponse:
-        if self.is_token_expired():
+        self._evn_area["access_token"] = token
+        if resp_json.get("expires_in"):
+            self._evn_area["token_expiry"] = time.time() + resp_json["expires_in"]
+
+        self._logged_in = True
+        self._last_login = dt_util.utcnow()
+        self._evnhanoi_contract = None  # reset cache on new login
+        return CONF_SUCCESS
+
+    # ------------------------------------------------------------------
+    # Realtime update
+    # ------------------------------------------------------------------
+    async def request_update(
+        self, username, password, customer_id, from_date, to_date
+    ) -> EVNUpdateResponse:
+        return await self._request_update_internal(
+            username, password, customer_id, from_date, to_date
+        )
+
+    async def _request_update_internal(
+        self, username, password, customer_id, from_date, to_date, last_index="001"
+    ) -> EVNUpdateResponse:
+
+        if self._need_login():
             if await self.login(username, password, customer_id) != CONF_SUCCESS:
                 return EVNUpdateResponse(status=CONF_ERR_INVALID_AUTH)
 
-        headers = {"Authorization": f"Bearer {self._evn_area.get('access_token')}", "Content-Type": "application/json"}
-        data = {"maDiemDo": f"{customer_id}{last_index}", "maDonVi": f"{customer_id[0:6]}", "maXacThuc": "EVNHN", "ngayDau": from_date, "ngayCuoi": to_date}
-        
-        status, resp_json = await self._request("POST", self._evn_area.get("evn_data_url"), json_data=data, headers=headers, api_name="Hanoi Data")
-        if status != CONF_SUCCESS: return EVNUpdateResponse(status=status)
+        headers = {
+            "Authorization": f"Bearer {self._evn_area.get('access_token')}",
+            "Content-Type": "application/json",
+        }
+
+        payload = {
+            "maDiemDo": f"{customer_id}{last_index}",
+            "maDonVi": customer_id[:6],
+            "maXacThuc": "EVNHN",
+            "ngayDau": from_date,
+            "ngayCuoi": to_date,
+        }
+
+        status, resp_json = await self._request(
+            "POST",
+            self._evn_area.get("evn_data_url"),
+            json_data=payload,
+            headers=headers,
+            api_name="Hanoi Data",
+        )
+
+        if status != CONF_SUCCESS:
+            return EVNUpdateResponse(status=status)
 
         if resp_json.get("isError"):
             if resp_json.get("code") == 400 and last_index == "001":
-                return await self.request_update_evnhanoi(username, password, customer_id, from_date, to_date, last_index="1")
-            return EVNUpdateResponse(status=CONF_ERR_INVALID_ID, data=resp_json)
+                return await self._request_update_internal(
+                    username, password, customer_id, from_date, to_date, last_index="1"
+                )
+            return EVNUpdateResponse(status=CONF_ERR_INVALID_ID)
 
-        sub_data = resp_json["data"]["chiSoNgay"]
-        f_date = parser.parse(sub_data[0]["ngay"], dayfirst=True).date()
-        t_date = (parser.parse(sub_data[-1 if len(sub_data) > 1 else 0]["ngay"], dayfirst=True) - timedelta(days=1)).date()
-        p_date = (parser.parse(sub_data[-2 if len(sub_data) > 2 else 0]["ngay"], dayfirst=True) - timedelta(days=1)).date()
+        data = resp_json.get("data", {}).get("chiSoNgay", [])
+        if not isinstance(data, list) or len(data) < 2:
+            return EVNUpdateResponse(status=CONF_ERR_NO_MONITOR)
 
-        econ_total_new = round(float(str(sub_data[-1 if len(sub_data) > 1 else 0]["sg"])), 2)
-        econ_total_old = round(float(str(sub_data[0]["sg"])), 2)
-        econ_daily_new = round(float(sub_data[-1 if len(sub_data) > 1 else 0]["sg"]) - float(sub_data[-2 if len(sub_data) > 2 else 0]["sg"]), 2)
-        econ_daily_old = round(float(sub_data[-2 if len(sub_data) > 2 else 0]["sg"]) - float(sub_data[-3 if len(sub_data) > 3 else 0]["sg"]), 2)
+        data.sort(key=lambda x: parser.parse(x["ngay"], dayfirst=True))
 
-        record_response = EVNUpdateResponse(
-            status=CONF_SUCCESS,
-            econ_total_old=econ_total_old, econ_total_new=econ_total_new,
-            econ_daily_old=econ_daily_old, econ_daily_new=econ_daily_new,
-            econ_monthly_new=round(econ_total_new - econ_total_old, 2),
-            to_date=t_date, from_date=f_date, previous_date=p_date,
-            payment_needed=STATUS_N_PAYMENT_NEEDED, m_payment_needed=0
+        f_date = parser.parse(data[0]["ngay"], dayfirst=True).date()
+        t_date = (
+            parser.parse(data[-1]["ngay"], dayfirst=True).date()
+            - timedelta(days=1)
+        )
+        p_date = (
+            parser.parse(data[-2]["ngay"], dayfirst=True).date()
+            - timedelta(days=1)
         )
 
-        pay_data = {"maKhachHang": customer_id, "maDonViQuanLy": f"{customer_id[0:6]}"}
-        p_status, p_json = await self._request("POST", self._evn_area.get("evn_payment_url"), json_data=pay_data, headers=headers, api_name="Hanoi Payment")
+        totals = [float(d["sg"]) for d in data]
 
-        if p_status == CONF_SUCCESS and not p_json["isError"]:
-            if len(p_json["data"]["listThongTinNoKhachHangVm"]):
-                record_response.payment_needed = STATUS_PAYMENT_NEEDED
-                record_response.m_payment_needed = int(p_json["data"]["listThongTinNoKhachHangVm"][0]["tongTien"].replace(".", ""))
-        
-        return record_response
+        record = EVNUpdateResponse(
+            status=CONF_SUCCESS,
+            econ_total_old=round(totals[0], 2),
+            econ_total_new=round(totals[-1], 2),
+            econ_daily_new=round(totals[-1] - totals[-2], 2),
+            econ_daily_old=round(totals[-2] - totals[-3], 2)
+            if len(totals) >= 3
+            else 0.0,
+            econ_monthly_new=round(totals[-1] - totals[0], 2),
+            from_date=f_date,
+            to_date=t_date,
+            previous_date=p_date,
+            payment_needed=STATUS_N_PAYMENT_NEEDED,
+            m_payment_needed=0,
+        )
 
+        # Payment
+        pay_payload = {
+            "maKhachHang": customer_id,
+            "maDonViQuanLy": customer_id[:6],
+        }
+        p_status, p_json = await self._request(
+            "POST",
+            self._evn_area.get("evn_payment_url"),
+            json_data=pay_payload,
+            headers=headers,
+            api_name="Hanoi Payment",
+        )
+
+        if (
+            p_status == CONF_SUCCESS
+            and not p_json.get("isError")
+            and p_json.get("data", {}).get("listThongTinNoKhachHangVm")
+        ):
+            record.payment_needed = STATUS_PAYMENT_NEEDED
+            record.m_payment_needed = int(
+                p_json["data"]["listThongTinNoKhachHangVm"][0]["tongTien"].replace(".", "")
+            )
+
+        return record
+
+    # ------------------------------------------------------------------
+    # Contract helper
+    # ------------------------------------------------------------------
     async def fetch_contract(self, customer_id: str):
-        if self._evnhanoi_contract: return self._evnhanoi_contract
-        headers = {"Accept": "application/json", "Authorization": f"Bearer {self._evn_area.get('access_token')}"}
-        status, data = await self._request("GET", "https://evnhanoi.vn/api/TraCuu/GetDanhSachHopDongByUserName", headers=headers, api_name="Hanoi Contract")
+        if self._evnhanoi_contract:
+            return self._evnhanoi_contract
+
+        headers = {
+            "Authorization": f"Bearer {self._evn_area.get('access_token')}",
+            "Accept": "application/json",
+        }
+
+        status, data = await self._request(
+            "GET",
+            "https://evnhanoi.vn/api/TraCuu/GetDanhSachHopDongByUserName",
+            headers=headers,
+            api_name="Hanoi Contract",
+        )
+
         if status == CONF_SUCCESS:
             contracts = data.get("data", {}).get("thongTinHopDongDtos", [])
             for c in contracts:
@@ -108,118 +218,157 @@ class HanoiRegion(EVNRegion):
                     return c
         return None
 
-    async def fetch_daily_range(self, customer_id: str, start: date, end: date):
-        contract = await self.fetch_contract(customer_id)
-        if not contract: return []
-        payload = {"maDonVi": contract["maDonViQuanLy"], "maDiemDo": f"{contract['maKhachHang']}001", "maXacThuc": "EVNHN", "ngayDau": start.strftime("%d/%m/%Y"), "ngayCuoi": end.strftime("%d/%m/%Y")}
-        headers = {"Authorization": f"Bearer {self._evn_area.get('access_token')}"}
-        status, data = await self._request("POST", "https://evnhanoi.vn/api/TraCuu/LayChiSoDoXaPharse2", json_data=payload, headers=headers, api_name="Hanoi Daily Range")
-        return data.get("data", {}).get("chiSoNgayFull", []) if status == CONF_SUCCESS else []
+    # ------------------------------------------------------------------
+    # Daily history
+    # ------------------------------------------------------------------
+    async def fetch_daily_history(
+        self, username, password, customer_id: str, start_date: date, end_date: date
+    ) -> list[DailyHistoryRecord]:
 
-    async def fetch_monthly_bills(self, customer_idValue: str):
-        today = date.today()
-        contract = await self.fetch_contract(customer_idValue)
-        if not contract: return []
-        headers = {"Authorization": f"Bearer {self._evn_area.get('access_token')}"}
-        params = {"maDvQly": contract["maDonViQuanLy"], "maKh": customer_idValue, "thang": today.month, "nam": today.year}
-        status, data = await self._request("GET", "https://evnhanoi.vn/api/TraCuu/GetLichSuThanhToan", params=params, headers=headers, api_name="Hanoi Bills")
-        return data.get("data", {}).get("dmLichSuThanhToanList", []) if status == CONF_SUCCESS else []
-
-    async def fetch_daily_history(self, username, password, customer_id: str, start_date: date, end_date: date) -> list[DailyHistoryRecord]:
-        if self.is_token_expired():
+        if self._need_login():
             if await self.login(username, password, customer_id) != CONF_SUCCESS:
-                _LOGGER.error("Hanoi: Login failed during history fetch")
                 return []
 
-        # Request 1 day extra at the start to calculate first day difference
         f_dt = start_date - timedelta(days=1)
-        
-        async def _fetch(m_index):
-            headers = {"Authorization": f"Bearer {self._evn_area.get('access_token')}", "Content-Type": "application/json"}
+
+        async def _fetch_phase1(idx):
+            headers = {
+                "Authorization": f"Bearer {self._evn_area.get('access_token')}",
+                "Content-Type": "application/json",
+            }
             payload = {
-                "maDiemDo": f"{customer_id}{m_index}",
-                "maDonVi": f"{customer_id[0:6]}",
+                "maDiemDo": f"{customer_id}{idx}",
+                "maDonVi": customer_id[:6],
                 "maXacThuc": "EVNHN",
                 "ngayDau": f_dt.strftime("%d/%m/%Y"),
-                "ngayCuoi": end_date.strftime("%d/%m/%Y")
+                "ngayCuoi": end_date.strftime("%d/%m/%Y"),
             }
-            status, resp_json = await self._request("POST", self._evn_area.get("evn_data_url"), json_data=payload, headers=headers, api_name=f"Hanoi History ({m_index})")
+            status, resp = await self._request(
+                "POST",
+                self._evn_area.get("evn_data_url"),
+                json_data=payload,
+                headers=headers,
+                api_name=f"Hanoi History ({idx})",
+            )
             if status == CONF_SUCCESS:
-                if isinstance(resp_json, list):
-                    return resp_json
-                elif isinstance(resp_json, dict):
-                    return resp_json.get("data", {}).get("chiSoNgay", [])
-            return None
+                return resp.get("data", {}).get("chiSoNgay", [])
+            return []
 
         async def _fetch_phase2():
             contract = await self.fetch_contract(customer_id)
-            if not contract: return []
-            headers = {"Authorization": f"Bearer {self._evn_area.get('access_token')}", "Content-Type": "application/json"}
+            if not contract:
+                return []
             payload = {
-                "maDonVi": contract["maDonViQuanLy"], 
-                "maDiemDo": f"{contract['maKhachHang']}001", 
-                "maXacThuc": "EVNHN", 
-                "ngayDau": f_dt.strftime("%d/%m/%Y"), 
-                "ngayCuoi": end_date.strftime("%d/%m/%Y")
+                "maDonVi": contract["maDonViQuanLy"],
+                "maDiemDo": f"{contract['maKhachHang']}001",
+                "maXacThuc": "EVNHN",
+                "ngayDau": f_dt.strftime("%d/%m/%Y"),
+                "ngayCuoi": end_date.strftime("%d/%m/%Y"),
             }
-            status, resp_json = await self._request("POST", "https://evnhanoi.vn/api/TraCuu/LayChiSoDoXaPharse2", json_data=payload, headers=headers, api_name="Hanoi History (P2)")
+            headers = {
+                "Authorization": f"Bearer {self._evn_area.get('access_token')}"
+            }
+            status, resp = await self._request(
+                "POST",
+                "https://evnhanoi.vn/api/TraCuu/LayChiSoDoXaPharse2",
+                json_data=payload,
+                headers=headers,
+                api_name="Hanoi History (P2)",
+            )
             if status == CONF_SUCCESS:
-                if isinstance(resp_json, list):
-                    return resp_json
-                elif isinstance(resp_json, dict):
-                    return resp_json.get("data", {}).get("chiSoNgayFull", [])
-            return None
-
-        # Try Phase 1 first (default)
-        data = await _fetch("001")
-        if not data:
-            data = await _fetch("1")
-        
-        # Fallback to Phase 2 (newer)
-        if not data:
-            data = await _fetch_phase2()
-        
-        if not data or not isinstance(data, list):
-            _LOGGER.debug("Hanoi: No daily data returned for %s", customer_id)
+                return resp.get("data", {}).get("chiSoNgayFull", [])
             return []
 
-        # Parse indices: entries are usually chronological
+        data = await _fetch_phase1("001") or await _fetch_phase1("1") or await _fetch_phase2()
+        if not data:
+            return []
+
         parsed = []
-        for entry in data:
+        for d in data:
             try:
-                dt = parser.parse(entry["ngay"], dayfirst=True).date()
-                val = float(entry["sg"])
-                parsed.append((dt, val))
-            except: continue
-        
-        if len(parsed) < 2: return []
+                parsed.append(
+                    (
+                        parser.parse(d["ngay"], dayfirst=True).date(),
+                        float(d["sg"]),
+                    )
+                )
+            except Exception:
+                continue
+
         parsed.sort(key=lambda x: x[0])
+        if len(parsed) < 2:
+            return []
 
         results = []
         for i in range(len(parsed) - 1):
-            prev_dt, prev_val = parsed[i]
-            curr_dt, curr_val = parsed[i+1]
-            # Record difference as consumption for prev_dt
-            if start_date <= prev_dt <= end_date:
-                results.append(DailyHistoryRecord(date=prev_dt, kwh=round(max(0.0, curr_val - prev_val), 3)))
-        
-        _LOGGER.debug("Hanoi: Fetched %d history records for %s", len(results), customer_id)
+            dt, val = parsed[i]
+            nxt_val = parsed[i + 1][1]
+            if start_date <= dt <= end_date:
+                results.append(
+                    DailyHistoryRecord(
+                        date=dt, kwh=round(max(0.0, nxt_val - val), 3)
+                    )
+                )
+
         return results
 
-    async def fetch_monthly_history(self, username, password, customer_id: str, history_start_date: date) -> list[MonthlyBillRecord]:
-        if self.is_token_expired():
+    # ------------------------------------------------------------------
+    # Monthly history
+    # ------------------------------------------------------------------
+    async def fetch_monthly_history(
+        self, username, password, customer_id: str, history_start_date: date
+    ) -> list[MonthlyBillRecord]:
+
+        if self._need_login():
             if await self.login(username, password, customer_id) != CONF_SUCCESS:
                 return []
+
         raw = await self.fetch_monthly_bills(customer_id)
-        if not isinstance(raw, list): return []
+        if not isinstance(raw, list):
+            return []
+
         results = []
         for b in raw:
             try:
                 year = int(b.get("nam"))
                 month = int(b.get("thang"))
-                if (year, month) < (history_start_date.year, history_start_date.month): continue
-                kwh = float(b.get("dienTthu"))
-                cost = parse_evnhanoi_money(b.get("soTien"))
-                results.append(MonthlyBillRecord(month=month, year=year, kwh=kwh, cost=cost))
-            except Exception: continue
+                if (year, month) < (
+                    history_start_date.year,
+                    history_start_date.month,
+                ):
+                    continue
+                results.append(
+                    MonthlyBillRecord(
+                        month=month,
+                        year=year,
+                        kwh=float(b.get("dienTthu")),
+                        cost=parse_evnhanoi_money(b.get("soTien")),
+                    )
+                )
+            except Exception:
+                continue
+
         return results
+
+    async def fetch_monthly_bills(self, customer_id: str):
+        contract = await self.fetch_contract(customer_id)
+        if not contract:
+            return []
+        today = date.today()
+        headers = {
+            "Authorization": f"Bearer {self._evn_area.get('access_token')}"
+        }
+        params = {
+            "maDvQly": contract["maDonViQuanLy"],
+            "maKh": customer_id,
+            "thang": today.month,
+            "nam": today.year,
+        }
+        status, data = await self._request(
+            "GET",
+            "https://evnhanoi.vn/api/TraCuu/GetLichSuThanhToan",
+            params=params,
+            headers=headers,
+            api_name="Hanoi Bills",
+        )
+        return data.get("data", {}).get("dmLichSuThanhToanList", []) if status == CONF_SUCCESS else []
